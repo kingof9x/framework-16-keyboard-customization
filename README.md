@@ -140,7 +140,7 @@ step-by-step MIDI and keyboard mapping.
 
 * **Building:** done by GitHub Actions on every push and pull request
   (`.github/workflows/`). The firmware workflow runs
-  [`firmware/build.sh`](firmware/build.sh) in Framework's own build container.
+  [`firmware/build.sh`](firmware/build.sh) on Ubuntu (Python 3.11 + ARM GCC).
   The app workflow runs the unit tests and builds the `.exe` on a Windows
   machine.
 * **How the app talks to the devices:** see

@@ -12,20 +12,26 @@ on:
 jobs:
   build:
     name: Build keyboard + macropad UF2
-    runs-on: ubuntu-latest
-    # Same container Framework uses to build their official firmware
-    container: qmkfm/qmk_cli
+    runs-on: ubuntu-24.04
+    # Framework's QMK v0.3.1 Python tooling needs Python < 3.12 (it uses ast.Num),
+    # so we don't use the current qmkfm/qmk_cli container.
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ARM toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi libnewlib-arm-none-eabi
 
       - name: Download Framework's QMK firmware source
         run: FETCH_ONLY=1 ./firmware/build.sh
 
       - name: Install QMK Python requirements
-        run: |
-          pip3 install -r firmware/.qmk_firmware/requirements.txt \
-            || pip3 install --break-system-packages -r firmware/.qmk_firmware/requirements.txt \
-            || echo "::warning::pip install failed; relying on the packages already in the container"
+        run: pip install qmk -r firmware/.qmk_firmware/requirements.txt
 
       - name: Build
         run: ./firmware/build.sh
