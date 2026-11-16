@@ -1,0 +1,64 @@
+name: Windows app
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths-ignore: ["firmware/**", "resolume/**"]
+  pull_request:
+    paths-ignore: ["firmware/**", "resolume/**"]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Test + build f16-lights.exe
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+      - name: Lint
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Unit tests (effect math + HID message encoding)
+        run: cargo test --workspace
+
+      - name: Build release exe
+        run: cargo build --release --locked
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: f16-lights-windows
+          path: app/target/release/f16-lights.exe
+          if-no-files-found: error
+
+  release:
+    name: Attach to GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: f16-lights-windows
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: f16-lights.exe

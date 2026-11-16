@@ -1,0 +1,21 @@
+[package]
+name = "f16-lights"
+description = "Windows app to control Framework Laptop 16 keyboard + RGB macropad lighting (f16custom firmware)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "f16-lights"
+path = "src/main.rs"
+
+[dependencies]
+f16-core = { path = "../core" }
+eframe = "0.37"
+
+# Pure-Rust HID backend on Windows: no C compiler or driver install needed.
+[target.'cfg(windows)'.dependencies]
+hidapi = { version = "2.6", default-features = false, features = ["windows-native"] }
+
+[target.'cfg(not(windows))'.dependencies]
+hidapi = "2.6"
