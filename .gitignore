@@ -1,0 +1,3 @@
+firmware/.qmk_firmware/
+firmware/out/
+app/target/
