@@ -53,7 +53,7 @@ pub struct EffectParams {
     pub effect: LinkedEffect,
     /// 0.05..=2.0; roughly "cycles per second".
     pub speed: f32,
-    /// Base colour (0..=1). Not used by the rainbow sweep.
+    /// Base color (0..=1). Not used by the rainbow sweep.
     pub hue: f32,
     pub saturation: f32,
     /// Overall brightness 0..=1 (the device's own brightness applies on top).
@@ -131,7 +131,7 @@ impl Renderer {
         self.ripples.retain(|r| now - r.start < life);
     }
 
-    /// Colour of one LED at time `t`. `width` is the combined layout width.
+    /// Color of one LED at time `t`. `width` is the combined layout width.
     pub fn color_at(&self, p: Point, t: f32, width: f32) -> Rgb {
         let pr = &self.params;
         let dir = if pr.reverse { -1.0 } else { 1.0 };
@@ -231,12 +231,12 @@ mod tests {
             r.color_at(p(0.0, 0.0), 0.4, w),
             r.color_at(p(w, 0.0), 0.4, w)
         );
-        // the middle is the opposite colour
+        // the middle is the opposite color
         assert_ne!(
             r.color_at(p(0.0, 0.0), 0.4, w),
             r.color_at(p(w / 2.0, 0.0), 0.4, w)
         );
-        // it moves: one LED changes colour over time and repeats after 1/speed s
+        // it moves: one LED changes color over time and repeats after 1/speed s
         let c0 = r.color_at(p(5.0, 0.0), 0.0, w);
         assert_ne!(c0, r.color_at(p(5.0, 0.0), 0.5, w));
         assert_eq!(c0, r.color_at(p(5.0, 0.0), 2.0, w));

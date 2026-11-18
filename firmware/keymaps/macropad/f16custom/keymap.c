@@ -10,8 +10,8 @@
 //                                            (remembered after unplugging)
 // Press the two BOTTOM corner keys together -> lighting controls on/off
 //
-// The two top corner keys always glow in the active layer's colour
-// (A = cyan, B = orange) and the whole pad flashes that colour on a switch.
+// The two top corner keys always glow in the active layer's color
+// (A = cyan, B = orange) and the whole pad flashes that color on a switch.
 // See resolume/MAPPING.md for the key-by-key sheet.
 
 #include QMK_KEYBOARD_H

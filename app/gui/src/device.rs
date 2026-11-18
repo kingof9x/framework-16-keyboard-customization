@@ -38,10 +38,36 @@ impl From<ProtocolError> for DeviceError {
 
 pub type Result<T> = std::result::Result<T, DeviceError>;
 
+/// Something that carries 32 byte reports to a device and back:
+/// the real USB connection, or the simulator used by `--demo`.
+pub trait Port {
+    fn write(&self, report: &Report) -> Result<()>;
+    /// `None` = nothing arrived within the timeout.
+    fn read(&self, timeout_ms: i32) -> Result<Option<Report>>;
+}
+
+struct HidPort(HidDevice);
+
+impl Port for HidPort {
+    fn write(&self, report: &Report) -> Result<()> {
+        // hidapi wants the report id (0 = none) in front
+        let mut buf = [0u8; REPORT_LEN + 1];
+        buf[1..].copy_from_slice(report);
+        self.0.write(&buf)?;
+        Ok(())
+    }
+
+    fn read(&self, timeout_ms: i32) -> Result<Option<Report>> {
+        let mut resp = [0u8; REPORT_LEN];
+        let n = self.0.read_timeout(&mut resp, timeout_ms)?;
+        Ok((n > 0).then_some(resp))
+    }
+}
+
 /// A connected keyboard or macropad (VIA raw HID interface).
 pub struct Device {
     pub kind: DeviceKind,
-    hid: HidDevice,
+    port: Box<dyn Port>,
 }
 
 /// What `scan` found for one device type.
@@ -53,22 +79,20 @@ pub enum Found {
 }
 
 impl Device {
+    pub fn new(kind: DeviceKind, port: Box<dyn Port>) -> Self {
+        Self { kind, port }
+    }
+
     pub fn send(&self, req: &Report) -> Result<()> {
-        // hidapi wants the report id (0 = none) in front
-        let mut buf = [0u8; REPORT_LEN + 1];
-        buf[1..].copy_from_slice(req);
-        self.hid.write(&buf)?;
-        Ok(())
+        self.port.write(req)
     }
 
     fn recv_matching(&self, req: &Report) -> Result<Report> {
         // Skip stale answers (e.g. left over after a timeout) until ours shows up.
         for _ in 0..8 {
-            let mut resp = [0u8; REPORT_LEN];
-            let n = self.hid.read_timeout(&mut resp, READ_TIMEOUT_MS)?;
-            if n == 0 {
+            let Some(resp) = self.port.read(READ_TIMEOUT_MS)? else {
                 return Err(DeviceError::Timeout);
-            }
+            };
             match proto::check_response(req, &resp) {
                 Err(ProtocolError::Mismatch { .. }) => continue,
                 Err(e) => return Err(e.into()),
@@ -125,7 +149,7 @@ pub fn open_raw(api: &mut HidApi, want: DeviceKind) -> Option<Device> {
                 && DeviceKind::from_pid(d.product_id()) == Some(want)
         })
         .find_map(|d| d.open_device(api).ok())
-        .map(|hid| Device { kind: want, hid })
+        .map(|hid| Device::new(want, Box::new(HidPort(hid))))
 }
 
 /// Finds the keyboard and macropad raw HID interfaces, skipping kinds in `skip`
@@ -153,14 +177,19 @@ pub fn scan(api: &mut HidApi, skip: &[DeviceKind]) -> Vec<Found> {
             continue;
         };
         seen.push(kind);
-        let dev = Device { kind, hid };
-        match dev.info() {
-            Ok(info) => match dev.led_points(info.led_count) {
-                Ok(leds) => found.push(Found::Ready(dev, info, leds)),
-                Err(_) => found.push(Found::Stock(kind)),
-            },
-            Err(_) => found.push(Found::Stock(kind)),
-        }
+        found.push(identify(Device::new(kind, Box::new(HidPort(hid)))));
     }
     found
+}
+
+/// Asks a freshly opened device whether it runs our firmware.
+pub fn identify(dev: Device) -> Found {
+    let kind = dev.kind;
+    match dev.info() {
+        Ok(info) => match dev.led_points(info.led_count) {
+            Ok(leds) => Found::Ready(dev, info, leds),
+            Err(_) => Found::Stock(kind),
+        },
+        Err(_) => Found::Stock(kind),
+    }
 }

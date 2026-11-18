@@ -5,8 +5,8 @@
 //
 // The key layout is identical to Framework's default keymap. What is added
 // (in users/f16custom) is:
-//   * a host-driven RGB effect the PC app can stream colours to
-//   * raw HID commands to read/set effect, speed, brightness and colour
+//   * a host-driven RGB effect the PC app can stream colors to
+//   * raw HID commands to read/set effect, speed, brightness and color
 //   * a hotkey lock (set from the PC app, saved in EEPROM) that turns the
 //     Fn lighting keys (RGB / backlight) into no-ops
 
