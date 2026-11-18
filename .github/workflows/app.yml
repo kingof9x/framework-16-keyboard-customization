@@ -14,7 +14,7 @@ env:
 
 jobs:
   build:
-    name: Test + build f16-lights.exe
+    name: Test + build framework-16-keyboard-control.exe
     runs-on: windows-latest
     defaults:
       run:
@@ -44,8 +44,8 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: f16-lights-windows
-          path: app/target/release/f16-lights.exe
+          name: framework-16-keyboard-control-windows
+          path: app/target/release/framework-16-keyboard-control.exe
           if-no-files-found: error
 
   release:
@@ -58,7 +58,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: f16-lights-windows
+          name: framework-16-keyboard-control-windows
       - uses: softprops/action-gh-release@v2
         with:
-          files: f16-lights.exe
+          files: framework-16-keyboard-control.exe

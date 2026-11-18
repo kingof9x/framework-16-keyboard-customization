@@ -1,4 +1,4 @@
-//! Framework 16 Lights: controls the f16custom firmware on the Framework
+//! Framework 16 Keyboard Control: controls the f16custom firmware on the Framework
 //! Laptop 16 keyboard and RGB macropad.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // no console window
@@ -22,13 +22,13 @@ use widgets::{button, card, primary, segmented, switch, ACCENT, ON_ACCENT};
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title("Framework 16 Lights")
+            .with_title("Framework 16 Keyboard Control")
             .with_inner_size([1280.0, 960.0])
             .with_min_inner_size([760.0, 600.0]),
         ..Default::default()
     };
     eframe::run_native(
-        "Framework 16 Lights",
+        "Framework 16 Keyboard Control",
         options,
         Box::new(|cc| Ok(Box::new(LightsApp::new(cc)))),
     )
@@ -91,7 +91,7 @@ impl LightsApp {
             style.spacing.button_padding = Vec2::new(10.0, 5.0);
             style.spacing.item_spacing = Vec2::new(8.0, 8.0);
         });
-        // `f16-lights.exe --demo` shows pretend devices (no hardware needed)
+        // `framework-16-keyboard-control.exe --demo` shows pretend devices (no hardware needed)
         let demo = std::env::args().any(|a| a == "--demo");
         let repaint = cc.egui_ctx.clone();
         let engine = engine::start(move || repaint.request_repaint(), demo);
@@ -235,7 +235,11 @@ impl LightsApp {
 
     fn header(&mut self, ui: &mut egui::Ui, status: &Status) {
         ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new("Framework 16 Lights").size(18.0).strong());
+            ui.label(
+                RichText::new("Framework 16 Keyboard Control")
+                    .size(18.0)
+                    .strong(),
+            );
             ui.add_space(8.0);
             for kind in [DeviceKind::Keyboard, DeviceKind::Macropad] {
                 let (dot, text) = match status.slot(kind) {

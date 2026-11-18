@@ -1,5 +1,5 @@
 //! A pretend keyboard + macropad that answer like the f16custom firmware.
-//! Used by `f16-lights.exe --demo` (try the app without the hardware) and
+//! Used by `framework-16-keyboard-control.exe --demo` (try the app without the hardware) and
 //! by the engine tests.
 
 use crate::device::{Port, Result};
