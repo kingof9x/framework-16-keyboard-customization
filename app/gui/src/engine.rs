@@ -2,6 +2,7 @@
 //! Linked frames and keeps a status snapshot for the UI.
 
 use crate::device::{self, Device, Found};
+use crate::sim::SimPort;
 use f16_core::effects::{EffectParams, Renderer, Rgb};
 use f16_core::layout::{CombinedLayout, MacropadSide, Point};
 use f16_core::protocol::{self as proto, DeviceInfo, DeviceKind, LedPoint, LightState};
@@ -16,6 +17,8 @@ const FRAME_INTERVAL: Duration = Duration::from_millis(33); // ~30 fps
 const IDLE_INTERVAL: Duration = Duration::from_millis(50);
 const REFRESH_INTERVAL: Duration = Duration::from_millis(1000);
 const SCAN_INTERVAL: Duration = Duration::from_millis(2500);
+/// How often joined devices get their effect clocks lined up again.
+const CLOCK_SYNC_INTERVAL: Duration = Duration::from_secs(10);
 
 pub enum Command {
     /// Built-in effect settings for one device. `save` = write to EEPROM.
@@ -33,6 +36,19 @@ pub enum Command {
     SetSide(MacropadSide),
     /// Restart a device into flashing mode (works on stock firmware too).
     Bootloader(DeviceKind),
+    /// Joined surface: Some((x_start, x_end)) per device, None = separate.
+    /// While joined, the effect clocks are kept in step.
+    SetSpan {
+        keyboard: Option<(u8, u8)>,
+        macropad: Option<(u8, u8)>,
+    },
+    /// Painted keys for one device (one entry per LED). `save` = keep after unplugging.
+    SetPaint {
+        kind: DeviceKind,
+        leds: Vec<proto::Paint>,
+        follow: bool,
+        save: bool,
+    },
     Rescan,
     Shutdown,
 }
@@ -42,6 +58,8 @@ pub struct DeviceStatus {
     pub info: DeviceInfo,
     pub state: LightState,
     pub streaming: bool,
+    /// LED positions, used to match keys to LEDs.
+    pub leds: Vec<LedPoint>,
 }
 
 #[derive(Clone, Default)]
@@ -58,7 +76,7 @@ pub struct Status {
     pub keyboard: Slot,
     pub macropad: Slot,
     pub linked: bool,
-    /// Linked mode preview: LED position + colour.
+    /// Linked mode preview: LED position + color.
     pub preview: Vec<(Point, Rgb)>,
     pub layout_size: (f32, f32),
     pub fps: f32,
@@ -113,13 +131,14 @@ impl Drop for EngineHandle {
     }
 }
 
-pub fn start(repaint: impl Fn() + Send + 'static) -> EngineHandle {
+/// `demo = true` uses the built-in simulator instead of USB devices.
+pub fn start(repaint: impl Fn() + Send + 'static, demo: bool) -> EngineHandle {
     let (tx, rx) = mpsc::channel();
     let status = Arc::new(Mutex::new(Status::default()));
     let st = status.clone();
     let thread = thread::Builder::new()
         .name("hid-engine".into())
-        .spawn(move || Engine::new(rx, st, Box::new(repaint)).run())
+        .spawn(move || Engine::new(rx, st, Box::new(repaint), demo).run())
         .expect("spawn engine thread");
     EngineHandle {
         tx,
@@ -128,13 +147,29 @@ pub fn start(repaint: impl Fn() + Send + 'static) -> EngineHandle {
     }
 }
 
+/// Pretend devices for `--demo`.
+fn demo_devices(skip: &[DeviceKind]) -> Vec<Found> {
+    [
+        (DeviceKind::Keyboard, SimPort::keyboard()),
+        (DeviceKind::Macropad, SimPort::macropad()),
+    ]
+    .into_iter()
+    .filter(|(kind, _)| !skip.contains(kind))
+    .map(|(kind, port)| device::identify(Device::new(kind, Box::new(port))))
+    .collect()
+}
+
 struct Engine {
     rx: Receiver<Command>,
     status: Arc<Mutex<Status>>,
     repaint: Box<dyn Fn() + Send>,
     api: Option<HidApi>,
+    demo: bool,
     open: BTreeMap<u8, Open>, // key: 0 keyboard, 1 macropad
     stock: Vec<DeviceKind>,
+    joined: bool,
+    last_clock_sync: Instant,
+    t0_clock: Instant,
     linked: Option<EffectParams>,
     renderer: Renderer,
     side: MacropadSide,
@@ -158,10 +193,12 @@ impl Engine {
         rx: Receiver<Command>,
         status: Arc<Mutex<Status>>,
         repaint: Box<dyn Fn() + Send>,
+        demo: bool,
     ) -> Self {
-        let api = match HidApi::new() {
-            Ok(a) => Some(a),
-            Err(e) => {
+        let api = match if demo { None } else { Some(HidApi::new()) } {
+            None => None,
+            Some(Ok(a)) => Some(a),
+            Some(Err(e)) => {
                 status.lock().unwrap().message =
                     Some(format!("Could not start USB HID access: {e}"));
                 None
@@ -172,8 +209,12 @@ impl Engine {
             status,
             repaint,
             api,
+            demo,
             open: BTreeMap::new(),
             stock: Vec::new(),
+            joined: false,
+            last_clock_sync: Instant::now(),
+            t0_clock: Instant::now(),
             linked: None,
             renderer: Renderer::default(),
             side: MacropadSide::default(),
@@ -211,6 +252,9 @@ impl Engine {
             }
             if self.linked.is_some() {
                 self.render_frame();
+            }
+            if self.joined && self.last_clock_sync.elapsed() >= CLOCK_SYNC_INTERVAL {
+                self.sync_clocks();
             }
             if self.last_refresh.elapsed() >= REFRESH_INTERVAL {
                 self.refresh();
@@ -281,6 +325,42 @@ impl Engine {
                 self.side = side;
                 self.rebuild_layout();
             }
+            Command::SetSpan { keyboard, macropad } => {
+                self.joined = keyboard.is_some() && macropad.is_some();
+                for (kind, span) in [
+                    (DeviceKind::Keyboard, keyboard),
+                    (DeviceKind::Macropad, macropad),
+                ] {
+                    if let Some(o) = self.open.get(&key(kind)) {
+                        let (x0, x1) = span.unwrap_or((0, 224));
+                        if let Err(e) = o.dev.transact(&proto::set_span(span.is_some(), x0, x1)) {
+                            self.fail(kind, e);
+                        }
+                    }
+                }
+                self.sync_clocks();
+            }
+            Command::SetPaint {
+                kind,
+                leds,
+                follow,
+                save,
+            } => {
+                if let Some(o) = self.open.get(&key(kind)) {
+                    let mut msgs = proto::encode_paint(&leds);
+                    msgs.push(proto::paint_ctrl(if follow {
+                        proto::PaintOp::FollowOn
+                    } else {
+                        proto::PaintOp::FollowOff
+                    }));
+                    if save {
+                        msgs.push(proto::paint_ctrl(proto::PaintOp::Save));
+                    }
+                    if let Err(e) = o.dev.transact_many(&msgs) {
+                        self.fail(kind, e);
+                    }
+                }
+            }
             Command::Rescan => {
                 self.last_scan = None;
             }
@@ -309,11 +389,29 @@ impl Engine {
         }
     }
 
+    /// Sends the same clock to both devices back to back so joined effects line up.
+    fn sync_clocks(&mut self) {
+        self.last_clock_sync = Instant::now();
+        let ms = self.t0_clock.elapsed().as_millis() as u32;
+        let msg = proto::set_clock(ms);
+        for o in self.open.values() {
+            let _ = o.dev.send(&msg);
+        }
+        for o in self.open.values() {
+            let _ = o.dev.transact(&proto::state_request());
+        }
+    }
+
     fn scan(&mut self) {
         self.last_scan = Some(Instant::now());
-        let Some(api) = self.api.as_mut() else { return };
         let skip: Vec<DeviceKind> = self.open.values().map(|o| o.dev.kind).collect();
-        let found = device::scan(api, &skip);
+        let found = if self.demo {
+            demo_devices(&skip)
+        } else if let Some(api) = self.api.as_mut() {
+            device::scan(api, &skip)
+        } else {
+            return;
+        };
         let mut stock = Vec::new();
         let mut added = false;
         for f in found {
@@ -363,13 +461,16 @@ impl Engine {
             });
             match res {
                 Ok((info, (state, streaming))) => {
-                    self.open.get_mut(&key(kind)).unwrap().info = info.clone();
+                    let o = self.open.get_mut(&key(kind)).unwrap();
+                    o.info = info.clone();
+                    let leds = o.leds.clone();
                     updates.push((
                         kind,
                         Slot::Ready(DeviceStatus {
                             info,
                             state,
                             streaming,
+                            leds,
                         }),
                     ));
                 }

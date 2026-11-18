@@ -25,7 +25,7 @@ firmware).
 
 | Id | Name | get payload (answer) | set payload |
 |----|------|----------------------|-------------|
-| `01` | INFO | `'F' 'X' version led_count effect_count host_effect_id kind(0=kb,1=pad) hotkey_lock layer(0xFF=n/a) max_brightness` | – |
+| `01` | INFO | `'F' 'X' version(2) led_count effect_count host_effect_id kind(0=kb,1=pad) hotkey_lock layer(0xFF=n/a) max_brightness paint_only_effect_id` | – |
 | `02` | STATE | `enabled mode hue sat val speed streaming` | `enabled mode hue sat val speed save` (`save=1` writes EEPROM) |
 | `03` | HOTKEY_LOCK | `on` | `on` (always saved to EEPROM) |
 | `04` | LED_INFO | request `start`; answer `start count (x y flags)×count` (max 9) | – |
@@ -33,12 +33,29 @@ firmware).
 | `06` | HOST_MODE | `on` | `1` = show PC frames (not saved), `0` = back to the saved effect |
 | `07` | KEY_EVENTS | `count led_index×count` (presses since the last poll, max 28) | – |
 | `08` | LAYER | `layer` | `0` = MIDI, `1` = F-keys (macropad only, saved) |
+| `09` | SPAN | `on x_start x_end` | `on x_start x_end`: joined surface, this device's slice of 0–224 (saved) |
+| `0A` | CLOCK | – | `ms` (u32, little endian): sets the effect clock; sent to both joined devices back to back |
+| `0B` | PAINT | request `start`; answer `start count (hue sat on)×count` (max 9) | `start count (hue sat on)×count` (max 8) |
+| `0C` | PAINT_CTRL | `follow count` | `op`: 0 clear, 1 save to EEPROM, 2 follow off, 3 follow on, 4 forget unsaved changes |
 
 Notes:
 
 * The PC-driven effect is a normal QMK effect (`RGB_MATRIX_CUSTOM_HOST_DRIVEN`,
-  id 45 with Framework's v0.3.1 effect list). Its colours are scaled by the
+  id 45 with Framework's v0.3.1 effect list). Its colors are scaled by the
   device's brightness, so Fn brightness keys still work.
+* **Joined surface:** QMK effects place LEDs on a 0–224 × 0–64 grid. With SPAN
+  on, the device squeezes its LEDs' x positions into `x_start..x_end`, so the
+  same built-in effect on both devices flows across them as one surface. The
+  app lines up the effect clocks with CLOCK every 10 s while it runs. The
+  clock offset is added only while a frame is drawn, so QMK's own timing is
+  unchanged.
+* **Painted keys** are applied after the effect has drawn each frame. With
+  "follow" on, a painted LED takes the brightness the effect gave it (read
+  back from the LED driver's frame buffer), with a floor of 30%. Painted keys,
+  the follow flag, the hotkey lock and the span are stored in the EEPROM user
+  datablock (390 bytes).
+* Effect ids with Framework's v0.3.1 list: 1–44 built-in, 45 PC controlled
+  (host driven), 46 off with painted keys only.
 * If no FRAME arrives for 3 seconds while host mode is on, the device returns to
   the effect saved in EEPROM by itself. A crashed app never leaves the lights
   frozen.

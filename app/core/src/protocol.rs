@@ -35,7 +35,7 @@ pub const CHANNEL: u8 = 0x00;
 pub const UNHANDLED: u8 = 0xFF;
 
 pub const MAGIC: [u8; 2] = *b"FX";
-pub const PROTOCOL_VERSION: u8 = 1;
+pub const PROTOCOL_VERSION: u8 = 2;
 
 /// Max LEDs per FRAME message. Host->device messages stay within 31 bytes
 /// (3 + 2 + 8 * 3 = 29) because the RP2040 sometimes only receives 31 of 32.
@@ -56,7 +56,26 @@ pub enum ValueId {
     HostMode = 0x06,
     KeyEvents = 0x07,
     Layer = 0x08,
+    Span = 0x09,
+    Clock = 0x0A,
+    Paint = 0x0B,
+    PaintCtrl = 0x0C,
 }
+
+/// Painted keys: what PAINT_CTRL can do.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum PaintOp {
+    Clear = 0,
+    Save = 1,
+    FollowOff = 2,
+    FollowOn = 3,
+    Reload = 4,
+}
+
+/// Painted LEDs per PAINT set message (3 + 2 + 8 * 3 = 29 bytes).
+pub const PAINT_PER_SET_MSG: usize = 8;
+pub const PAINT_PER_GET_MSG: usize = 9;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DeviceKind {
@@ -164,6 +183,8 @@ pub struct DeviceInfo {
     /// Macropad layer (0 = MIDI, 1 = F-keys); None on the keyboard.
     pub layer: Option<u8>,
     pub max_brightness: u8,
+    /// Effect id of "off, painted keys only".
+    pub paint_only_effect: u8,
 }
 
 pub fn info_request() -> Report {
@@ -195,6 +216,7 @@ pub fn parse_info(payload: &[u8]) -> Result<DeviceInfo, ProtocolError> {
             Some(payload[8])
         },
         max_brightness: payload[9],
+        paint_only_effect: payload[10],
     })
 }
 
@@ -304,6 +326,78 @@ pub fn bootloader_request() -> Report {
 }
 
 // ---------------------------------------------------------------------------
+// Joined surface, effect clock, painted keys
+// ---------------------------------------------------------------------------
+
+/// Joined surface: this device takes `x_start..=x_end` of the shared 0..=224 space.
+pub fn set_span(on: bool, x_start: u8, x_end: u8) -> Report {
+    set(ValueId::Span, &[on as u8, x_start, x_end])
+}
+
+pub fn span_request() -> Report {
+    get(ValueId::Span, &[])
+}
+
+pub fn parse_span(payload: &[u8]) -> (bool, u8, u8) {
+    (payload[0] != 0, payload[1], payload[2])
+}
+
+/// Sets the effect clock to `ms`. Sent to both joined devices back to back.
+pub fn set_clock(ms: u32) -> Report {
+    set(ValueId::Clock, &ms.to_le_bytes())
+}
+
+/// One LED's paint: `None` = not painted.
+pub type Paint = Option<(u8, u8)>;
+
+/// PAINT set messages for every LED (index order).
+pub fn encode_paint(leds: &[Paint]) -> Vec<Report> {
+    leds.chunks(PAINT_PER_SET_MSG)
+        .enumerate()
+        .map(|(i, chunk)| {
+            let mut p = vec![(i * PAINT_PER_SET_MSG) as u8, chunk.len() as u8];
+            for led in chunk {
+                match led {
+                    Some((h, s)) => p.extend_from_slice(&[*h, *s, 1]),
+                    None => p.extend_from_slice(&[0, 0, 0]),
+                }
+            }
+            set(ValueId::Paint, &p)
+        })
+        .collect()
+}
+
+pub fn paint_requests(led_count: u8) -> Vec<Report> {
+    (0..led_count as usize)
+        .step_by(PAINT_PER_GET_MSG)
+        .map(|s| get(ValueId::Paint, &[s as u8]))
+        .collect()
+}
+
+pub fn parse_paint(payload: &[u8]) -> Vec<Paint> {
+    let n = (payload[1] as usize).min(PAINT_PER_GET_MSG);
+    (0..n)
+        .map(|i| {
+            let b = &payload[2 + i * 3..5 + i * 3];
+            (b[2] != 0).then_some((b[0], b[1]))
+        })
+        .collect()
+}
+
+pub fn paint_ctrl(op: PaintOp) -> Report {
+    set(ValueId::PaintCtrl, &[op as u8])
+}
+
+pub fn paint_ctrl_request() -> Report {
+    get(ValueId::PaintCtrl, &[])
+}
+
+/// (follow the effect, number of painted LEDs)
+pub fn parse_paint_ctrl(payload: &[u8]) -> (bool, u8) {
+    (payload[0] != 0, payload[1])
+}
+
+// ---------------------------------------------------------------------------
 // LED positions
 // ---------------------------------------------------------------------------
 
@@ -345,7 +439,7 @@ pub fn parse_led_info(payload: &[u8]) -> Vec<LedPoint> {
 // Frames and key events
 // ---------------------------------------------------------------------------
 
-/// Splits one frame (one colour per LED, in LED index order) into FRAME messages.
+/// Splits one frame (one color per LED, in LED index order) into FRAME messages.
 pub fn encode_frame(colors: &[[u8; 3]]) -> Vec<Report> {
     colors
         .chunks(FRAME_LEDS_PER_MSG)
@@ -457,6 +551,29 @@ mod tests {
     }
 
     #[test]
+    fn span_clock_and_paint_messages() {
+        assert_eq!(&set_span(true, 0, 180)[..6], &[0x07, 0, 0x09, 1, 0, 180]);
+        assert_eq!(parse_span(&[1, 186, 224]), (true, 186, 224));
+        assert_eq!(&set_clock(0x0102_0304)[..7], &[0x07, 0, 0x0A, 4, 3, 2, 1]);
+        let mut leds: Vec<Paint> = vec![None; 97];
+        leds[0] = Some((10, 20));
+        leds[96] = Some((30, 40));
+        let msgs = encode_paint(&leds);
+        assert_eq!(msgs.len(), 13);
+        assert_eq!(&msgs[0][..8], &[0x07, 0, 0x0B, 0, 8, 10, 20, 1]);
+        assert_eq!(&msgs[0][8..11], &[0, 0, 0]);
+        let last = msgs.last().unwrap();
+        assert_eq!(&last[3..8], &[96, 1, 30, 40, 1]);
+        assert!(msgs.iter().all(|m| m[29..].iter().all(|&b| b == 0)));
+        let mut pl = [0u8; 29];
+        pl[..8].copy_from_slice(&[9, 2, 5, 6, 1, 0, 0, 0]);
+        assert_eq!(parse_paint(&pl), vec![Some((5, 6)), None]);
+        assert_eq!(&paint_ctrl(PaintOp::Save)[..4], &[0x07, 0, 0x0C, 1]);
+        assert_eq!(parse_paint_ctrl(&[1, 12]), (true, 12));
+        assert_eq!(paint_requests(97).len(), 11);
+    }
+
+    #[test]
     fn response_checks() {
         let req = info_request();
         let mut ok = req;
@@ -480,10 +597,11 @@ mod tests {
     #[test]
     fn parses_info() {
         let mut p = [0u8; 29];
-        p[..10].copy_from_slice(&[b'F', b'X', 1, 97, 46, 45, 1, 1, 0, 255]);
+        p[..11].copy_from_slice(&[b'F', b'X', 2, 97, 47, 45, 1, 1, 0, 255, 46]);
         let info = parse_info(&p).unwrap();
         assert_eq!(info.led_count, 97);
-        assert_eq!(info.effect_count, 46);
+        assert_eq!(info.effect_count, 47);
+        assert_eq!(info.paint_only_effect, 46);
         assert_eq!(info.host_effect, 45);
         assert_eq!(info.kind, DeviceKind::Macropad);
         assert!(info.hotkey_lock);

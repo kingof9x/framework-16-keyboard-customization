@@ -20,7 +20,11 @@
 typedef union {
     uint32_t raw;
     struct {
-        bool hotkey_lock : 1;
+        bool    hotkey_lock : 1;
+        bool    span_on : 1;   // joined with the other device
+        uint8_t unused : 6;
+        uint8_t span_x0;       // this device's slice of the shared 0..224 surface
+        uint8_t span_x1;
     };
 } user_config_t;
 
@@ -30,8 +34,10 @@ static bool          user_config_loaded = false;
 // Loaded lazily: Framework's macropad code already owns keyboard_post_init_user().
 static void user_config_load(void) {
     if (!user_config_loaded) {
-        user_config.raw    = eeconfig_read_user();
+        user_config.raw    = surface_config_read();
         user_config_loaded = true;
+        surface_apply_span(user_config.span_on, user_config.span_x0, user_config.span_x1);
+        surface_paint_reload();
     }
 }
 
@@ -71,13 +77,14 @@ bool hostfx_hotkey_lock_get(void) {
 void hostfx_hotkey_lock_set(bool on) {
     user_config_load();
     user_config.hotkey_lock = on;
-    eeconfig_update_user(user_config.raw);
+    surface_config_write(user_config.raw);
 }
 
 void eeconfig_init_user(void) {
     user_config.raw    = 0;
     user_config_loaded = true;
-    eeconfig_update_user(user_config.raw);
+    surface_store_reset();
+    surface_apply_span(false, 0, 224);
 }
 
 // ---------------------------------------------------------------------------
@@ -105,7 +112,7 @@ void hostfx_host_mode_set(bool on) {
     } else {
         if (host_requested) {
             host_requested = false;
-            // Back to whatever was saved (effect, colour, on/off)
+            // Back to whatever was saved (effect, color, on/off)
             rgb_matrix_reload_from_eeprom();
         }
     }
@@ -113,6 +120,7 @@ void hostfx_host_mode_set(bool on) {
 
 void housekeeping_task_user(void) {
     user_config_load();
+    surface_housekeeping();
     // The app went away (closed, crashed, unplugged): fall back to the saved effect.
     if (host_requested && timer_elapsed32(last_frame_timer) >= HOSTFX_TIMEOUT_MS) {
         hostfx_host_mode_set(false);
@@ -172,6 +180,7 @@ static void handle_get(uint8_t value_id, uint8_t *d) {
             d[7] = hostfx_hotkey_lock_get();
             d[8] = hostfx_get_layer();
             d[9] = RGB_MATRIX_MAXIMUM_BRIGHTNESS;
+            d[10] = RGB_MATRIX_CUSTOM_PAINT_ONLY;
             break;
         case HOSTFX_STATE: {
             HSV hsv = rgb_matrix_get_hsv();
@@ -213,6 +222,15 @@ static void handle_get(uint8_t value_id, uint8_t *d) {
         }
         case HOSTFX_LAYER:
             d[0] = hostfx_get_layer();
+            break;
+        case HOSTFX_SPAN:
+            surface_span_get(d);
+            break;
+        case HOSTFX_PAINT:
+            surface_paint_get(d);
+            break;
+        case HOSTFX_PAINT_CTRL:
+            surface_paint_ctrl_get(d);
             break;
         default:
             break;
@@ -259,6 +277,21 @@ static bool handle_set(uint8_t value_id, uint8_t *d) {
             return true;
         case HOSTFX_LAYER:
             return hostfx_set_layer(d[0]);
+        case HOSTFX_SPAN:
+            user_config_load();
+            user_config.span_on = d[0] != 0;
+            user_config.span_x0 = d[1];
+            user_config.span_x1 = d[2];
+            surface_config_write(user_config.raw);
+            surface_apply_span(user_config.span_on, d[1], d[2]);
+            return true;
+        case HOSTFX_CLOCK:
+            surface_set_clock((uint32_t)d[0] | ((uint32_t)d[1] << 8) | ((uint32_t)d[2] << 16) | ((uint32_t)d[3] << 24));
+            return true;
+        case HOSTFX_PAINT:
+            return surface_paint_set(d);
+        case HOSTFX_PAINT_CTRL:
+            return surface_paint_ctrl(d[0]);
         default:
             return false;
     }

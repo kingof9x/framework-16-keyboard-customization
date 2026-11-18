@@ -14,9 +14,14 @@ the Windows app.
 ## What you get
 
 **Both devices**
-* All of Framework's built-in lighting effects, plus a new **"PC controlled"**
-  effect that the app can draw on.
-* The app can read and set the effect, speed, brightness and colour.
+* All 44 of Framework's built-in lighting effects, plus a **"PC controlled"**
+  effect the app can draw on and an **"Off, painted keys only"** effect.
+* **Join into one device:** the keyboard and macropad run an effect as one
+  surface, so a sweep starts on the keyboard and finishes at the far edge of
+  the macropad. This keeps working with the app closed.
+* **Painted keys:** give any key its own color. Painted keys can still react
+  to the running effect. They're saved on the device.
+* The app can read and set the effect, speed, brightness and color.
 * **Hotkey lock** (toggle in the app, remembered by the device): Fn + lighting
   keys do nothing, so a stray key press can't change the lights during a show.
 * VIA and Framework's `qmk_hid` tool still work.
@@ -31,19 +36,25 @@ the Windows app.
 * Press the **two bottom corner keys together** for the lighting controls
   overlay.
 
-**App**
-* Finds both devices and controls each one separately, or
-* **Linked** mode: the PC draws one effect across the keyboard and macropad
-  together. The choices are a wave, a rainbow sweep, and ripples that start
-  from every key you press. Set which side the macropad is on so effects flow
-  across in the right order.
-* Hotkey lock toggle, macropad layer switch, and a button that restarts a
-  device into flashing mode.
+**App** (tabs: Show, Effects, Macropad, Firmware)
+* A live picture of your keyboard and side module, lit with the same effect
+  formulas the firmware uses. Nothing changes on the hardware until you press
+  **Send to devices**.
+* **Your setup:** keyboard Clear RGB, Black RGB, or Black with white backlight;
+  side module None, RGB macropad, or Numpad, on the left or right.
+* **Show:** try any effect across both devices as one surface, and paint keys
+  with your own colors.
+* **Effects:** a separate effect for each device, or **Join into one device**.
+  Full color picker (any color the LEDs can make), speed and brightness.
+* **Macropad:** switch layers and see what each key sends.
+* **Firmware:** restart a device into flashing mode.
+* App-drawn effects (wave, rainbow sweep, keypress ripple), hotkey lock, and
+  dark or light mode following Windows.
 
 > **Only for the ANSI (US) keyboard and the RGB macropad.** Don't flash the
 > keyboard file onto an ISO/JIS keyboard or the numpad. If your ANSI keyboard
 > has the white (non-RGB) backlight, the firmware still works for typing, but
-> the colour features do nothing.
+> the color features do nothing.
 
 ---
 
@@ -110,21 +121,35 @@ is expected.
 2. At the top, both devices should show **connected (f16custom firmware)**.
    *"found, but not running the f16custom firmware"* means you still need to
    flash that device.
-3. Controls:
-   * **Hotkey lock:** tick it to make Fn + lighting keys (and the macropad's
-     lighting overlay) do nothing. It stays on until you untick it, even after
-     restarts.
-   * **Macropad layer:** A (MIDI) or B (F-keys). Same as pressing the two top
-     corners.
-   * **Separate effects:** each device has an effect list, on/off, brightness,
-     speed and colour. Changes show right away. Click **Save as default** to
-     keep them after a restart or unplug.
-   * **Linked (PC drives both):** pick *Wave*, *Rainbow sweep* or *Keypress
-     ripple*, and set speed, brightness and colour. Tell it whether the
-     macropad is on the left or right. A live preview shows what's being sent.
-4. When you close the app, or switch back to *Separate effects*, both devices
-   return to their saved effects. If the app crashes, they do this on their
-   own after about 3 seconds.
+3. Pick **Your setup** at the top: which keyboard you have, which side module
+   (the app detects a macropad by itself) and which side it's on. The app
+   remembers it.
+4. The tabs:
+   * **Show:** pick an effect (all 44 built-in effects, "Off, painted keys
+     only", or the three app-drawn ones). Set color, speed and brightness. In
+     the preview, effects run across the keyboard and side module as one
+     surface. Under **Key colors**, pick a color and click or drag across keys
+     to paint them. **Painted keys still react to the effect** makes them
+     brighten and dim with the effect. Press **Send to devices** to try it on
+     the hardware, or **Save as default** to keep it after a restart.
+   * **Effects:** an effect, color, speed and brightness for each device.
+     **Join into one device** makes one card drive both, running as one
+     surface. **Copy to** copies one device's settings to the other.
+   * **Macropad:** switch layer A (MIDI) or B (F-keys); click a macropad key in
+     the picture to see what it sends.
+   * **Firmware:** restart a device into flashing mode.
+   * **Hotkey lock** (top right): Fn + lighting keys and the macropad's lighting
+     overlay do nothing until you switch it off again.
+5. When you close the app, devices running an app-drawn effect go back to
+   their saved effect. Built-in effects, joined surfaces and painted keys keep
+   running without the app.
+
+Black keyboards with a white backlight and the numpad have one white light for
+all keys, so they can only change brightness. The app shows them in plain
+white.
+
+Try the app without the hardware: run `f16-lights.exe --demo` from a command
+prompt to use two pretend devices.
 
 The app needs no install and no admin rights. You can keep the `.exe`
 anywhere.

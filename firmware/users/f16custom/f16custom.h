@@ -20,3 +20,17 @@ void hostfx_hotkey_lock_set(bool on);
 extern uint8_t hostfx_frame[RGB_MATRIX_LED_COUNT][3];
 bool hostfx_host_mode_active(void);
 void hostfx_host_mode_set(bool on);
+
+// surface.c: joined surface, effect clock, painted keys
+void surface_apply_span(bool on, uint8_t x0, uint8_t x1);
+void surface_span_get(uint8_t *d);
+void surface_set_clock(uint32_t ms);
+void surface_housekeeping(void);
+void     surface_paint_reload(void);
+void     surface_store_reset(void);
+uint32_t surface_config_read(void);
+void     surface_config_write(uint32_t config);
+void surface_paint_get(uint8_t *d);
+bool surface_paint_set(const uint8_t *d);
+void surface_paint_ctrl_get(uint8_t *d);
+bool surface_paint_ctrl(uint8_t op);
