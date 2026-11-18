@@ -1,5 +1,5 @@
 //! Remembers the user's setup, painted keys and effect choices between runs
-//! (a small text file in %APPDATA%\f16-lights on Windows).
+//! (a small text file in %APPDATA%\framework-16-keyboard-control on Windows).
 
 use crate::deck::{Choice, Dev, KbType, Look, Setup};
 use f16_core::effects::LinkedEffect;
@@ -41,12 +41,24 @@ impl Default for Saved {
     }
 }
 
-fn path() -> Option<PathBuf> {
-    let base = std::env::var_os("APPDATA")
+fn config_dir() -> Option<PathBuf> {
+    std::env::var_os("APPDATA")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from))
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
-    Some(base.join("f16-lights").join("settings.txt"))
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))
+}
+
+fn path() -> Option<PathBuf> {
+    Some(
+        config_dir()?
+            .join("framework-16-keyboard-control")
+            .join("settings.txt"),
+    )
+}
+
+/// Where the app kept its settings when it was called "Framework 16 Lights".
+fn old_path() -> Option<PathBuf> {
+    Some(config_dir()?.join("f16-lights").join("settings.txt"))
 }
 
 fn choice_str(c: Choice) -> String {
@@ -196,6 +208,7 @@ pub fn from_text(text: &str) -> Saved {
 pub fn load() -> Saved {
     path()
         .and_then(|p| std::fs::read_to_string(p).ok())
+        .or_else(|| old_path().and_then(|p| std::fs::read_to_string(p).ok()))
         .map(|t| from_text(&t))
         .unwrap_or_default()
 }

@@ -8,7 +8,7 @@ the Windows app.
 | Folder | What it is |
 |---|---|
 | [`firmware/`](firmware/) | Custom QMK firmware (`f16custom`) for the keyboard and the macropad |
-| [`app/`](app/) | **Framework 16 Lights**, a Windows app to control both devices' lighting |
+| [`app/`](app/) | **Framework 16 Keyboard Control**, a Windows app to control both devices' lighting |
 | [`resolume/`](resolume/MAPPING.md) | Key-by-key macropad sheet and how to map it in Resolume |
 
 ## What you get
@@ -65,12 +65,12 @@ The builds come from GitHub Actions:
 1. Open this repo's **Actions** tab.
 2. Pick the latest green run of **Firmware**. At the bottom, under
    *Artifacts*, download **firmware-uf2**. Do the same in the **Windows app**
-   workflow and download **f16-lights-windows**. (You must be signed in to
+   workflow and download **framework-16-keyboard-control-windows**. (You must be signed in to
    GitHub to download artifacts.)
 3. Unzip both. You get:
    * `framework_ansi_f16custom.uf2`: keyboard firmware
    * `framework_macropad_f16custom.uf2`: macropad firmware
-   * `f16-lights.exe`: the app
+   * `framework-16-keyboard-control.exe`: the app
 
 If a version tag (for example `v0.1.0`) has been pushed, the same files are
 also attached to the matching page under **Releases**.
@@ -83,8 +83,8 @@ flashing mode it doesn't type, so use the touchpad (and an external keyboard
 if you need one).
 
 **Enter flashing mode, easy way (works on Framework's official firmware too):**
-open `f16-lights.exe` → **Firmware update** → *Restart Keyboard into flashing
-mode* (or Macropad) → confirm.
+open `framework-16-keyboard-control.exe` → **Firmware** tab → *Restart keyboard into
+flashing mode* (or macropad) → confirm.
 
 **Enter flashing mode, manual way:**
 * **Keyboard:** hold **both Alt keys** (left Alt and right Alt) while you
@@ -115,7 +115,7 @@ is expected.
 
 ## 4. Use the app
 
-1. Double-click `f16-lights.exe`. The first time, Windows may say *"Windows
+1. Double-click `framework-16-keyboard-control.exe`. The first time, Windows may say *"Windows
    protected your PC"* because the app isn't signed. Click **More info → Run
    anyway**.
 2. At the top, both devices should show **connected (f16custom firmware)**.
@@ -148,7 +148,7 @@ Black keyboards with a white backlight and the numpad have one white light for
 all keys, so they can only change brightness. The app shows them in plain
 white.
 
-Try the app without the hardware: run `f16-lights.exe --demo` from a command
+Try the app without the hardware: run `framework-16-keyboard-control.exe --demo` from a command
 prompt to use two pretend devices.
 
 The app needs no install and no admin rights. You can keep the `.exe`

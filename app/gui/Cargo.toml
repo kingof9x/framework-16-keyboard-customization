@@ -1,12 +1,12 @@
 [package]
-name = "f16-lights"
+name = "framework-16-keyboard-control"
 description = "Windows app to control Framework Laptop 16 keyboard + RGB macropad lighting (f16custom firmware)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "f16-lights"
+name = "framework-16-keyboard-control"
 path = "src/main.rs"
 
 [dependencies]
