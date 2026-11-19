@@ -1,0 +1,16 @@
+// Settings: the window's look, like White Rabbit's.
+import { Theme } from "../theme.slint";
+import { App } from "../state.slint";
+import { Group, RadioButton } from "../widgets.slint";
+
+export component SettingsPage inherits VerticalLayout {
+    spacing: 12px;
+    Group {
+        title: "Look";
+        help: "System follows Windows' light or dark mode and accent color. Classic uses the plain Windows colors, and is used whenever high contrast is on.";
+        RadioButton { text: "System"; checked: App.theme-choice == 0; clicked => { App.theme-chosen(0); } }
+        RadioButton { text: "Light"; checked: App.theme-choice == 1; clicked => { App.theme-chosen(1); } }
+        RadioButton { text: "Dark"; checked: App.theme-choice == 2; clicked => { App.theme-chosen(2); } }
+        RadioButton { text: "Classic"; checked: App.theme-choice == 3; clicked => { App.theme-chosen(3); } }
+    }
+}

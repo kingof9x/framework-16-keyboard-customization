@@ -1,0 +1,33 @@
+// Firmware: restart a device into flashing mode.
+import { Button } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { App } from "../state.slint";
+import { Card, Hint, Body } from "../widgets.slint";
+
+component Restart inherits Card {
+    in property <int> which;
+    icon: @image-url("../icons/developer_board.svg");
+    HorizontalLayout {
+        spacing: 8px;
+        if App.confirm-bootloader == root.which: Body { text: "Really restart it?"; vertical-alignment: center; }
+        if App.confirm-bootloader == root.which: Button { text: "Yes, restart it"; clicked => { App.bootloader(root.which); App.confirm-bootloader = -1; } }
+        if App.confirm-bootloader == root.which: Button { text: "Cancel"; clicked => { App.confirm-bootloader = -1; } }
+        if App.confirm-bootloader != root.which: Button { text: "Restart into flashing mode"; clicked => { App.confirm-bootloader = root.which; } }
+    }
+}
+
+export component FirmwarePage inherits VerticalLayout {
+    spacing: 4px;
+    Hint { text: "A drive called RPI-RP2 appears; drag the matching .uf2 file onto it. While a device is in flashing mode it does not type, so use the touchpad or an external keyboard for the drag and drop."; }
+    Rectangle { height: 8px; }
+    if App.kb-present: Restart { which: 0; title: "Keyboard"; help: "framework_ansi_f16custom.uf2"; }
+    if App.mod-present: Restart { which: 1; title: "Macropad"; help: "framework_macropad_f16custom.uf2"; }
+    if !App.kb-present && !App.mod-present: Body { text: "No keyboard or macropad found."; }
+    Rectangle { height: 8px; }
+    Card {
+        icon: @image-url("../icons/info.svg");
+        title: "Search again";
+        help: "Look for the keyboard and macropad again, for example after flashing.";
+        Button { text: "Search again"; clicked => { App.rescan(); } }
+    }
+}

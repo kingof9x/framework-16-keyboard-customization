@@ -17,6 +17,8 @@ pub struct Saved {
     pub module: Look,
     pub brush: (u8, u8),
     pub paint: HashMap<(Dev, usize), (u8, u8)>,
+    /// The window's look: "system", "light", "dark" or "classic".
+    pub theme: String,
 }
 
 impl Default for Saved {
@@ -37,6 +39,7 @@ impl Default for Saved {
             module: look(Choice::Builtin(13), 128, 255, 230, 100),
             brush: (128, 255),
             paint: HashMap::new(),
+            theme: "system".into(),
         }
     }
 }
@@ -61,7 +64,7 @@ fn old_path() -> Option<PathBuf> {
     Some(config_dir()?.join("f16-lights").join("settings.txt"))
 }
 
-fn choice_str(c: Choice) -> String {
+pub fn choice_str(c: Choice) -> String {
     match c {
         Choice::PaintOnly => "paint".into(),
         Choice::Builtin(id) => format!("b{id}"),
@@ -71,7 +74,7 @@ fn choice_str(c: Choice) -> String {
     }
 }
 
-fn parse_choice(s: &str) -> Option<Choice> {
+pub fn parse_choice(s: &str) -> Option<Choice> {
     Some(match s {
         "paint" => Choice::PaintOnly,
         "pc-wave" => Choice::Pc(LinkedEffect::Wave),
@@ -135,6 +138,7 @@ pub fn to_text(s: &Saved) -> String {
         s.brush.0,
         s.brush.1
     );
+    out += &format!("theme={}\n", s.theme);
     let mut keys: Vec<_> = s.paint.iter().collect();
     keys.sort();
     for ((dev, i), (h, sat)) in keys {
@@ -174,6 +178,7 @@ pub fn from_text(text: &str) -> Saved {
             "left" => s.setup.module_left = v == "true",
             "follow" => s.follow = v != "false",
             "join" => s.join = v == "true",
+            "theme" if crate::theme::CHOICES.contains(&v) => s.theme = v.to_string(),
             "show" => s.show = parse_look(v).unwrap_or(s.show),
             "kb" => s.kb = parse_look(v).unwrap_or(s.kb),
             "module" => s.module = parse_look(v).unwrap_or(s.module),
