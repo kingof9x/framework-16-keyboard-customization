@@ -24,7 +24,7 @@ use engine::{Command, EngineHandle, Slot, Status};
 use f16_core::builtin::qmk_hsv;
 use f16_core::effects::LinkedEffect;
 use f16_core::keys::{self, SideModule, KEYBOARD_SIZE, MODULE_GRID};
-use f16_core::protocol::{DeviceKind, LightState, Paint, EFFECT_NAMES};
+use f16_core::protocol::{DeviceKind, LightState, Paint, PaintMode, EFFECT_NAMES};
 use settings::Saved;
 use slint::{Color, ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use std::cell::RefCell;
@@ -62,10 +62,16 @@ pub struct State {
     pad_key: usize,
     pc_live: bool,
     notice: String,
-    detected_module: bool,
     adopted: Vec<DeviceKind>,
-    /// Send to devices acts on: [keyboard, macropad]
-    send_to: [bool; 2],
+    /// A lighting change waiting to go to the devices (sent live, a few times a second).
+    dirty: bool,
+    last_live: Instant,
+    /// LED calibration waiting to be saved on a device: (keyboard, macropad) last change time.
+    cal_dirty: [Option<Instant>; 2],
+    /// Plain white on both devices while matching their brightness.
+    white_test: bool,
+    /// What the app found plugged in last time (to follow module swaps).
+    last_detected: Option<SideModule>,
     windows: theme::Windows,
     last_theme_check: Instant,
     status: Status,
@@ -144,6 +150,18 @@ impl State {
     }
 }
 
+/// "#RRGGBB" (or "RRGGBB") -> hue and saturation on the firmware's 0..255 scale.
+fn parse_hex(t: &str) -> Option<(u8, u8)> {
+    let t = t.trim().trim_start_matches('#');
+    if t.len() != 6 || !t.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    let v = u32::from_str_radix(t, 16).ok()?;
+    let rgb = [(v >> 16) as u8, (v >> 8) as u8, v as u8];
+    let (h, s, _) = deck::rgb_to_qmk_hsv(rgb);
+    Some((h, s))
+}
+
 fn color(c: [u8; 3]) -> Color {
     Color::from_rgb_u8(c[0], c[1], c[2])
 }
@@ -156,21 +174,6 @@ fn ready(status: &Status, kind: DeviceKind) -> Option<&engine::DeviceStatus> {
     match status.slot(kind) {
         Slot::Ready(d) => Some(d),
         _ => None,
-    }
-}
-
-fn effect_index(l: &Look) -> i32 {
-    match l.choice {
-        Choice::Builtin(id) => id as i32,
-        _ => 0,
-    }
-}
-
-fn choice_of_index(i: i32) -> Choice {
-    if (1..=44).contains(&i) {
-        Choice::Builtin(i as u8)
-    } else {
-        Choice::PaintOnly
     }
 }
 
@@ -193,8 +196,7 @@ impl State {
     // Sending to the devices
     // ---------------------------------------------------------------------
 
-    /// `balance`: brightness in percent of the chosen one (the macropad's balance setting).
-    fn state_for(look: &Look, d: &engine::DeviceStatus, balance: u8) -> LightState {
+    fn state_for(look: &Look, d: &engine::DeviceStatus) -> LightState {
         let mode = match look.choice {
             Choice::Builtin(id) => id,
             _ => d.info.paint_only_effect,
@@ -204,7 +206,7 @@ impl State {
             mode,
             hue: look.hue,
             sat: look.sat,
-            val: (look.val as u32 * balance as u32 / 100).min(255) as u8,
+            val: look.val,
             speed: look.speed,
         }
     }
@@ -221,24 +223,43 @@ impl State {
             .collect()
     }
 
-    fn targets(&self) -> Vec<(DeviceKind, Dev, bool, usize)> {
+    fn targets(&self) -> Vec<(DeviceKind, Dev, bool)> {
         vec![
-            (
-                DeviceKind::Keyboard,
-                Dev::Keyboard,
-                self.s.setup.kb.rgb(),
-                0,
-            ),
+            (DeviceKind::Keyboard, Dev::Keyboard, self.s.setup.kb.rgb()),
             (
                 DeviceKind::Macropad,
                 Dev::Module,
                 self.s.setup.side == SideModule::Macropad,
-                1,
             ),
         ]
     }
 
-    /// Sends a look to each checked device (and the joined surface and painted keys).
+    /// Joined: one effect across both devices.
+    fn joined(&self) -> bool {
+        self.s.join && self.s.setup.side != SideModule::None
+    }
+
+    /// The look the Lighting page edits.
+    fn edit_look(&self) -> Look {
+        if self.joined() || !self.s.edit_module {
+            self.s.kb
+        } else {
+            self.s.module
+        }
+    }
+
+    fn set_edit_look(&mut self, l: Look) {
+        if self.joined() {
+            self.s.kb = l;
+            self.s.module = l;
+        } else if self.s.edit_module {
+            self.s.module = l;
+        } else {
+            self.s.kb = l;
+        }
+    }
+
+    /// Sends the looks, the joined surface and painted keys to the devices.
     fn send_looks(&mut self, kb: Look, module: Look, join: bool, save: bool) {
         let status = self.status.clone();
         if let Choice::Pc(e) = kb.choice {
@@ -255,29 +276,17 @@ impl State {
                 self.engine.send(Command::SetLinked(None));
                 self.pc_live = false;
             }
-            for (kind, look, n) in [
-                (DeviceKind::Keyboard, kb, 0),
-                (DeviceKind::Macropad, module, 1),
-            ] {
-                if let (Some(d), true) = (ready(&status, kind), self.send_to[n]) {
+            for (kind, look) in [(DeviceKind::Keyboard, kb), (DeviceKind::Macropad, module)] {
+                if let Some(d) = ready(&status, kind) {
                     self.engine.send(Command::SetState {
                         kind,
-                        state: Self::state_for(
-                            &look,
-                            d,
-                            if kind == DeviceKind::Macropad {
-                                self.s.pad_balance
-                            } else {
-                                100
-                            },
-                        ),
+                        state: Self::state_for(&look, d),
                         save,
                     });
                 }
             }
             let both = ready(&status, DeviceKind::Keyboard).is_some()
-                && ready(&status, DeviceKind::Macropad).is_some()
-                && self.send_to == [true, true];
+                && ready(&status, DeviceKind::Macropad).is_some();
             let (ks, ms) = deck::span_slices(&self.s.setup);
             let on = join && both && self.s.setup.side == SideModule::Macropad;
             self.engine.send(Command::SetSpan {
@@ -285,13 +294,13 @@ impl State {
                 macropad: on.then_some(ms),
             });
         }
-        for (kind, dev, rgb, n) in self.targets() {
-            if let (Some(d), true, true) = (ready(&status, kind), rgb, self.send_to[n]) {
+        for (kind, dev, rgb) in self.targets() {
+            if let (Some(d), true) = (ready(&status, kind), rgb) {
                 let leds = self.paint_for(dev, d);
                 self.engine.send(Command::SetPaint {
                     kind,
                     leds,
-                    follow: self.s.follow,
+                    mode: self.s.paint_mode,
                     save,
                 });
             }
@@ -299,35 +308,61 @@ impl State {
         let any = self
             .targets()
             .iter()
-            .any(|(kind, _, _, n)| ready(&status, *kind).is_some() && self.send_to[*n]);
+            .any(|(kind, _, _)| ready(&status, *kind).is_some());
         self.notice = if !any {
-            "No device to send to: none is connected, or none is ticked under Send to.".into()
+            "No device connected.".into()
         } else if save {
-            "Sent and saved on the devices.".into()
+            "Saved on the devices: they start this way after a restart.".into()
         } else {
-            "Sent to the devices.".into()
+            String::new()
         };
     }
 
-    fn send_effects(&mut self, save: bool) {
-        let (kb, m) = (
-            self.s.kb,
-            if self.s.join {
-                self.s.kb
-            } else {
-                self.s.module
-            },
-        );
-        let join = self.s.join;
+    /// Sends what the Lighting page shows (live, or saved with `save`).
+    fn send_current(&mut self, save: bool) {
+        if self.white_test {
+            return;
+        }
+        let join = self.joined();
+        let (kb, m) = (self.s.kb, if join { self.s.kb } else { self.s.module });
         self.send_looks(kb, m, join, save);
     }
 
+    /// Plain white on both devices, for matching their brightness by eye.
+    fn send_white(&mut self) {
+        let status = self.status.clone();
+        if self.pc_live {
+            self.engine.send(Command::SetLinked(None));
+            self.pc_live = false;
+        }
+        let val = self.s.kb.val.max(128);
+        for kind in [DeviceKind::Keyboard, DeviceKind::Macropad] {
+            if ready(&status, kind).is_some() {
+                self.engine.send(Command::SetState {
+                    kind,
+                    state: LightState {
+                        enabled: true,
+                        mode: 1, // solid color
+                        hue: 0,
+                        sat: 0,
+                        val,
+                        speed: 128,
+                    },
+                    save: false,
+                });
+                self.engine.send(Command::SetPaint {
+                    kind,
+                    leds: vec![],
+                    mode: self.s.paint_mode,
+                    save: false,
+                });
+            }
+        }
+    }
+
     fn scene(&self, page: &str) -> Scene<'_> {
-        let show = page == "show";
-        let joined = show || (self.s.join && self.s.setup.side != SideModule::None);
-        let (kb, module) = if show {
-            (self.s.show, self.s.show)
-        } else if joined {
+        let joined = self.joined();
+        let (kb, module) = if joined {
             (self.s.kb, self.s.kb)
         } else {
             (self.s.kb, self.s.module)
@@ -338,9 +373,9 @@ impl State {
             kb,
             module,
             paint: &self.s.paint,
-            follow: self.s.follow,
+            paint_mode: self.s.paint_mode,
             macropad_layer: self.layer(),
-            show_paint_marks: show,
+            show_paint_marks: page == "lighting",
             selected: match page {
                 "macropad" => Some((Dev::Module, self.pad_key)),
                 "keys" => self.ke.sel,
@@ -369,31 +404,27 @@ fn push_all(app: &AppWindow, st: &State) {
         SideModule::Numpad => 2,
     });
     g.set_module_left(s.setup.module_left);
-    g.set_show_effect(
-        settings::choice_str(s.show.choice)
-            .replace("-", "_")
-            .replace("_", "-")
-            .into(),
-    );
-    g.set_show_hue(s.show.hue as i32);
-    g.set_show_sat(s.show.sat as i32);
-    g.set_show_val(s.show.val as i32);
-    g.set_show_speed(s.show.speed as i32);
-    g.set_follow(s.follow);
+    let look = st.edit_look();
+    g.set_show_effect(settings::choice_str(look.choice).into());
+    g.set_show_hue(look.hue as i32);
+    g.set_show_sat(look.sat as i32);
+    g.set_show_val(look.val as i32);
+    g.set_show_speed(look.speed as i32);
+    g.set_paint_mode(match s.paint_mode {
+        PaintMode::Steady => 0,
+        PaintMode::Follow => 1,
+        PaintMode::Tint => 2,
+    });
     g.set_brush_hue(s.brush.0 as i32);
     g.set_brush_sat(s.brush.1 as i32);
     g.set_join(s.join);
-    g.set_kb_effect(effect_index(&s.kb));
-    g.set_kb_hue(s.kb.hue as i32);
-    g.set_kb_sat(s.kb.sat as i32);
-    g.set_kb_val(s.kb.val as i32);
-    g.set_kb_speed(s.kb.speed as i32);
-    g.set_mod_effect(effect_index(&s.module));
-    g.set_mod_hue(s.module.hue as i32);
-    g.set_mod_sat(s.module.sat as i32);
-    g.set_mod_val(s.module.val as i32);
-    g.set_mod_speed(s.module.speed as i32);
-    g.set_pad_balance(s.pad_balance as f32);
+    g.set_target(if st.joined() {
+        0
+    } else if s.edit_module && s.setup.side != SideModule::None {
+        2
+    } else {
+        1
+    });
     g.set_theme_choice(
         theme::CHOICES
             .iter()
@@ -414,7 +445,8 @@ fn push_derived(app: &AppWindow, st: &State) {
             hex(qmk_hsv(h as i32, sat as i32, 255)),
         )
     };
-    let (f, p, x) = picker(s.show.hue, s.show.sat);
+    let look = st.edit_look();
+    let (f, p, x) = picker(look.hue, look.sat);
     g.set_show_full(f);
     g.set_show_picked(p);
     g.set_show_hex(x);
@@ -422,15 +454,7 @@ fn push_derived(app: &AppWindow, st: &State) {
     g.set_brush_full(f);
     g.set_brush_picked(p);
     g.set_brush_hex(x);
-    let (f, p, x) = picker(s.kb.hue, s.kb.sat);
-    g.set_kb_full(f);
-    g.set_kb_picked(p);
-    g.set_kb_hex(x);
-    let (f, p, x) = picker(s.module.hue, s.module.sat);
-    g.set_mod_full(f);
-    g.set_mod_picked(p);
-    g.set_mod_hex(x);
-    g.set_show_effect_name(s.show.choice.name().into());
+    g.set_show_effect_name(look.choice.name().into());
 
     let has = s.setup.side != SideModule::None;
     g.set_has_module(has);
@@ -514,45 +538,31 @@ fn push_derived(app: &AppWindow, st: &State) {
 /// Reads the window's choices back into the state.
 fn pull_all(app: &AppWindow, st: &mut State) {
     let g = app.global::<App>();
-    let s = &mut st.s;
-    s.setup.kb = match g.get_kb_type() {
-        1 => KbType::BlackRgb,
-        2 => KbType::White,
-        _ => KbType::ClearRgb,
-    };
-    s.setup.side = match g.get_side() {
-        0 => SideModule::None,
-        2 => SideModule::Numpad,
-        _ => SideModule::Macropad,
-    };
-    s.setup.module_left = g.get_module_left();
-    if let Some(c) = settings::parse_choice(&g.get_show_effect()) {
-        s.show.choice = c;
-    }
     let b = |v: i32| v.clamp(0, 255) as u8;
-    s.show.hue = b(g.get_show_hue());
-    s.show.sat = b(g.get_show_sat());
-    s.show.val = b(g.get_show_val());
-    s.show.speed = b(g.get_show_speed());
-    s.follow = g.get_follow();
-    s.brush = (b(g.get_brush_hue()), b(g.get_brush_sat()));
-    s.kb = Look {
-        choice: choice_of_index(g.get_kb_effect()),
-        hue: b(g.get_kb_hue()),
-        sat: b(g.get_kb_sat()),
-        val: b(g.get_kb_val()),
-        speed: b(g.get_kb_speed()),
-    };
-    s.module = Look {
-        choice: choice_of_index(g.get_mod_effect()),
-        hue: b(g.get_mod_hue()),
-        sat: b(g.get_mod_sat()),
-        val: b(g.get_mod_val()),
-        speed: b(g.get_mod_speed()),
-    };
-    if s.join {
-        s.module = s.kb;
+    {
+        let s = &mut st.s;
+        s.setup.kb = match g.get_kb_type() {
+            1 => KbType::BlackRgb,
+            2 => KbType::White,
+            _ => KbType::ClearRgb,
+        };
+        s.setup.side = match g.get_side() {
+            0 => SideModule::None,
+            2 => SideModule::Numpad,
+            _ => SideModule::Macropad,
+        };
+        s.setup.module_left = g.get_module_left();
+        s.brush = (b(g.get_brush_hue()), b(g.get_brush_sat()));
     }
+    let mut look = st.edit_look();
+    if let Some(c) = settings::parse_choice(&g.get_show_effect()) {
+        look.choice = c;
+    }
+    look.hue = b(g.get_show_hue());
+    look.sat = b(g.get_show_sat());
+    look.val = b(g.get_show_val());
+    look.speed = b(g.get_show_speed());
+    st.set_edit_look(look);
 }
 
 fn effect_models(app: &AppWindow) {
@@ -614,7 +624,7 @@ fn tick(app: &AppWindow, st: &mut State) {
     st.status = st.engine.status.lock().unwrap().clone();
     let status = st.status.clone();
 
-    // Start the Effects page from what each device is running.
+    // Start the Lighting page from what each device is running.
     let mut adopted_any = false;
     for kind in [DeviceKind::Keyboard, DeviceKind::Macropad] {
         if st.adopted.contains(&kind) {
@@ -639,26 +649,77 @@ fn tick(app: &AppWindow, st: &mut State) {
             } else if ds.mode == d.info.paint_only_effect {
                 look.choice = Choice::PaintOnly;
             }
+            if st.s.join && kind == DeviceKind::Keyboard {
+                st.s.module = st.s.kb;
+            }
+            push_cal(app, &status, kind);
             adopted_any = true;
         }
     }
-    // The first time a macropad shows up, put it in the setup.
-    if !st.detected_module && ready(&status, DeviceKind::Macropad).is_some() {
-        st.detected_module = true;
-        if st.s.setup.side == SideModule::None {
-            st.s.setup.side = SideModule::Macropad;
-            adopted_any = true;
+    // Follow what is plugged in: macropad (our firmware or not) or Framework's numpad.
+    let detected = if !matches!(status.macropad, Slot::Missing) {
+        Some(SideModule::Macropad)
+    } else if status.numpad {
+        Some(SideModule::Numpad)
+    } else {
+        None
+    };
+    if detected != st.last_detected {
+        st.last_detected = detected;
+        if let Some(side) = detected {
+            if st.s.setup.side != side {
+                st.s.setup.side = side;
+                adopted_any = true;
+            }
+        }
+    }
+    // Remember clear / black / white per keyboard (by its serial number).
+    if let Some(serial) = ready(&status, DeviceKind::Keyboard).and_then(|d| d.serial.clone()) {
+        match st.s.kb_types.iter().find(|(s, _)| *s == serial) {
+            Some((_, t)) if *t != st.s.setup.kb => {
+                st.s.setup.kb = *t;
+                adopted_any = true;
+            }
+            Some(_) => {}
+            None => st.s.kb_types.push((serial, st.s.setup.kb)),
         }
     }
     if adopted_any {
         push_all(app, st);
     }
 
-    // Devices at the bottom of the menu
-    let rows: Vec<DeviceRow> = [DeviceKind::Keyboard, DeviceKind::Macropad]
-        .iter()
+    // Live: send lighting changes a few times a second while they happen
+    if st.dirty && st.last_live.elapsed() >= Duration::from_millis(80) {
+        st.dirty = false;
+        st.last_live = Instant::now();
+        st.send_current(false);
+    }
+    // Save LED calibration on the device once the sliders have been still for a moment
+    for (i, kind) in [DeviceKind::Keyboard, DeviceKind::Macropad]
+        .into_iter()
         .enumerate()
-        .map(|(i, &kind)| {
+    {
+        if st.cal_dirty[i].is_some_and(|t| t.elapsed() >= Duration::from_millis(800)) {
+            st.cal_dirty[i] = None;
+            if let Some(cal) = cal_from_window(app, i) {
+                st.engine.send(Command::SetLedCal {
+                    kind,
+                    cal,
+                    save: true,
+                });
+            }
+        }
+    }
+
+    // Devices at the bottom of the menu
+    let mut rows: Vec<DeviceRow> = [DeviceKind::Keyboard, DeviceKind::Macropad]
+        .iter()
+        .filter(|&&kind| {
+            kind == DeviceKind::Keyboard
+                || !status.numpad
+                || !matches!(status.macropad, Slot::Missing)
+        })
+        .map(|&kind| {
             let (text, ok) = match status.slot(kind) {
                 Slot::Missing => ("Not found".to_string(), false),
                 Slot::Stock => ("Needs the f16custom firmware".to_string(), false),
@@ -675,10 +736,18 @@ fn tick(app: &AppWindow, st: &mut State) {
                 name: kind.name().into(),
                 status: text.into(),
                 ok,
-                checked: st.send_to[i],
+                checked: false,
             }
         })
         .collect();
+    if status.numpad {
+        rows.push(DeviceRow {
+            name: "Numpad".into(),
+            status: "Connected · backlight only".into(),
+            ok: true,
+            checked: false,
+        });
+    }
     let same = g.get_devices().iter().eq(rows.iter().cloned());
     if !same {
         g.set_devices(ModelRc::new(VecModel::from(rows)));
@@ -691,7 +760,7 @@ fn tick(app: &AppWindow, st: &mut State) {
     } else if !st.notice.is_empty() {
         st.notice.clone().into()
     } else {
-        "Preview only: nothing changes on the devices until you press Send.".into()
+        "Live: changes show on the devices as you make them. Save as default keeps them after a restart.".into()
     });
     g.set_status(status.message.clone().unwrap_or_default().into());
     g.set_hotkey_lock(
@@ -719,12 +788,7 @@ fn tick(app: &AppWindow, st: &mut State) {
         keyedit::push(app, st);
     }
     let visible = app.window().is_visible();
-    if visible
-        && matches!(
-            page.as_str(),
-            "show" | "effects" | "macropad" | "setup" | "keys"
-        )
-    {
+    if visible && matches!(page.as_str(), "lighting" | "macropad" | "setup" | "keys") {
         let scale = app.window().scale_factor();
         let width = ((g.get_deck_width() * scale).round() as u32).clamp(300, 1400);
         let mut preview = std::mem::take(&mut st.preview);
@@ -804,6 +868,58 @@ fn tick(app: &AppWindow, st: &mut State) {
     }
 }
 
+/// Puts one device's LED calibration into the window's sliders.
+fn push_cal(app: &AppWindow, status: &Status, kind: DeviceKind) {
+    let g = app.global::<App>();
+    let cal = ready(status, kind).and_then(|d| d.led_cal);
+    let c = cal.unwrap_or(f16_core::protocol::LedCal {
+        current: 104,
+        gains: [255; 3],
+        default_current: 104,
+    });
+    if kind == DeviceKind::Keyboard {
+        g.set_kb_cal_known(cal.is_some());
+        g.set_kb_cal_current(c.current as i32);
+        g.set_kb_cal_r(c.gains[0] as i32);
+        g.set_kb_cal_g(c.gains[1] as i32);
+        g.set_kb_cal_b(c.gains[2] as i32);
+    } else {
+        g.set_mod_cal_known(cal.is_some());
+        g.set_mod_cal_current(c.current as i32);
+        g.set_mod_cal_r(c.gains[0] as i32);
+        g.set_mod_cal_g(c.gains[1] as i32);
+        g.set_mod_cal_b(c.gains[2] as i32);
+    }
+}
+
+/// One device's LED calibration as the window's sliders show it (0 keyboard, 1 macropad).
+fn cal_from_window(app: &AppWindow, which: usize) -> Option<f16_core::protocol::LedCal> {
+    let g = app.global::<App>();
+    let b = |v: i32| v.clamp(1, 255) as u8;
+    let (known, cur, r, gr, bl) = if which == 0 {
+        (
+            g.get_kb_cal_known(),
+            g.get_kb_cal_current(),
+            g.get_kb_cal_r(),
+            g.get_kb_cal_g(),
+            g.get_kb_cal_b(),
+        )
+    } else {
+        (
+            g.get_mod_cal_known(),
+            g.get_mod_cal_current(),
+            g.get_mod_cal_r(),
+            g.get_mod_cal_g(),
+            g.get_mod_cal_b(),
+        )
+    };
+    known.then_some(f16_core::protocol::LedCal {
+        current: b(cur),
+        gains: [b(r), b(gr), b(bl)],
+        default_current: 0,
+    })
+}
+
 fn g_accent(app: &AppWindow) -> [u8; 3] {
     let c = app.global::<Theme>().get_accent();
     [c.red(), c.green(), c.blue()]
@@ -851,9 +967,12 @@ fn main() -> Result<(), slint::PlatformError> {
         pad_key: 0,
         pc_live: false,
         notice: String::new(),
-        detected_module: false,
         adopted: vec![],
-        send_to: [true, true],
+        dirty: false,
+        last_live: Instant::now(),
+        cal_dirty: [None, None],
+        white_test: false,
+        last_detected: None,
         windows: theme::read_windows(),
         last_theme_check: Instant::now(),
         status: Status::default(),
@@ -893,15 +1012,20 @@ fn main() -> Result<(), slint::PlatformError> {
 
     on!(on_setup_changed, |app, st| {
         pull_all(&app, st);
+        // Remember the keyboard type for the keyboard that is plugged in
+        if let Some(serial) = ready(&st.status, DeviceKind::Keyboard).and_then(|d| d.serial.clone())
+        {
+            let t = st.s.setup.kb;
+            st.s.kb_types.retain(|(s, _)| *s != serial);
+            st.s.kb_types.push((serial, t));
+        }
         push_derived(&app, st);
+        st.dirty = true;
     });
     on!(on_show_changed, |app, st| {
         pull_all(&app, st);
         push_derived(&app, st);
-    });
-    on!(on_effects_changed, |app, st| {
-        pull_all(&app, st);
-        push_all(&app, st);
+        st.dirty = true;
     });
     on!(on_join_toggled, |app, st, on: bool| {
         pull_all(&app, st);
@@ -910,25 +1034,30 @@ fn main() -> Result<(), slint::PlatformError> {
             st.s.module = st.s.kb;
         }
         push_all(&app, st);
-        st.send_effects(false);
+        st.dirty = true;
     });
-    on!(on_copy_settings, |app, st, which: i32| {
+    on!(on_target_chosen, |app, st, target: i32| {
         pull_all(&app, st);
-        if which == 0 {
+        st.s.join = target == 0;
+        st.s.edit_module = target == 2;
+        if st.s.join {
             st.s.module = st.s.kb;
-        } else {
-            st.s.kb = st.s.module;
         }
         push_all(&app, st);
+        st.dirty = true;
+    });
+    on!(on_paint_mode_chosen, |app, st, mode: i32| {
+        st.s.paint_mode = match mode {
+            0 => PaintMode::Steady,
+            2 => PaintMode::Tint,
+            _ => PaintMode::Follow,
+        };
+        push_all(&app, st);
+        st.dirty = true;
     });
     on!(on_send_show, |app, st, save: bool| {
         pull_all(&app, st);
-        let look = st.s.show;
-        st.send_looks(look, look, true, save);
-    });
-    on!(on_send_effects, |app, st, save: bool| {
-        pull_all(&app, st);
-        st.send_effects(save);
+        st.send_current(save);
     });
     on!(on_stop_pc, |_app, st| {
         st.engine.send(Command::SetLinked(None));
@@ -946,10 +1075,12 @@ fn main() -> Result<(), slint::PlatformError> {
             }
         }
         push_derived(&app, st);
+        st.dirty = true;
     });
     on!(on_paint_clear, |app, st| {
         st.s.paint.clear();
         push_derived(&app, st);
+        st.dirty = true;
     });
     on!(on_deck_pointer, |app, st, xf: f32, yf: f32, kind: i32| {
         let g = app.global::<App>();
@@ -958,14 +1089,16 @@ fn main() -> Result<(), slint::PlatformError> {
             return;
         };
         match g.get_page().as_str() {
-            "show" if k.rgb => {
+            "lighting" if k.rgb => {
                 pull_all(&app, st);
                 if g.get_paint_tool() == 1 {
                     st.s.paint.remove(&(k.dev, k.index));
                 } else {
+                    // a painted key takes the new color too
                     st.s.paint.insert((k.dev, k.index), st.s.brush);
                 }
                 push_derived(&app, st);
+                st.dirty = true;
             }
             "macropad" if k.dev == Dev::Module && kind == 0 => {
                 st.pad_key = k.index;
@@ -995,11 +1128,61 @@ fn main() -> Result<(), slint::PlatformError> {
     on!(on_rescan, |_app, st| {
         st.engine.send(Command::Rescan);
     });
-    on!(on_device_checked, |_app, st, i: i32, on: bool| {
-        if let Some(v) = st.send_to.get_mut(i as usize) {
-            *v = on;
+    // Matching the two devices' brightness
+    on!(on_cal_changed, |app, st, which: i32| {
+        let i = which.clamp(0, 1) as usize;
+        let kind = if i == 0 {
+            DeviceKind::Keyboard
+        } else {
+            DeviceKind::Macropad
+        };
+        if let Some(cal) = cal_from_window(&app, i) {
+            st.engine.send(Command::SetLedCal {
+                kind,
+                cal,
+                save: false,
+            });
+            st.cal_dirty[i] = Some(Instant::now());
         }
     });
+    on!(on_cal_reset, |app, st, which: i32| {
+        let i = which.clamp(0, 1) as usize;
+        let kind = if i == 0 {
+            DeviceKind::Keyboard
+        } else {
+            DeviceKind::Macropad
+        };
+        if let Some(d) = ready(&st.status, kind) {
+            if let Some(mut cal) = d.led_cal {
+                cal.current = cal.default_current;
+                cal.gains = [255; 3];
+                st.engine.send(Command::SetLedCal {
+                    kind,
+                    cal,
+                    save: true,
+                });
+                if let Slot::Ready(d) = st.status.slot_mut(kind) {
+                    d.led_cal = Some(cal);
+                }
+                push_cal(&app, &st.status, kind);
+            }
+        }
+    });
+    on!(on_white_test_toggled, |app, st, on: bool| {
+        st.white_test = on;
+        app.global::<App>().set_white_test(on);
+        if on {
+            st.send_white();
+        } else {
+            st.send_current(false);
+        }
+    });
+    // Color codes typed or pasted into a color picker
+    {
+        let g = app.global::<App>();
+        g.on_hex_hue(|t| parse_hex(&t).map_or(-1, |(h, _)| h as i32));
+        g.on_hex_sat(|t| parse_hex(&t).map_or(-1, |(_, s)| s as i32));
+    }
     // Keys page
     on!(on_keys_view_chosen, |app, st, which: i32, view: i32| {
         keyedit::view_chosen(st, which, view);
@@ -1071,13 +1254,6 @@ fn main() -> Result<(), slint::PlatformError> {
         keyedit::corner_lights_toggled(st, on);
         keyedit::push(&app, st);
     });
-    on!(on_pad_balance_changed, |app, st| {
-        let v = app.global::<App>().get_pad_balance();
-        st.s.pad_balance = (v.round() as i32).clamp(50, 150) as u8;
-        pull_all(&app, st);
-        st.send_effects(false);
-    });
-
     on!(on_theme_chosen, |app, st, i: i32| {
         st.s.theme = theme::CHOICES
             .get(i as usize)

@@ -16,3 +16,8 @@
 // Each combo can be turned off from the app (combo_should_trigger in keymap.c).
 #define COMBO_SHOULD_TRIGGER
 
+
+// Framework drives the macropad LEDs harder than the keyboard's (global current
+// 185 vs 104), so at the same brightness the macropad looked much brighter.
+// Start from the keyboard's current; the app can fine-tune both (LED_CAL).
+#define F16_DEFAULT_GLOBALCURRENT 104

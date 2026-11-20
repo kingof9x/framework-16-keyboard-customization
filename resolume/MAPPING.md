@@ -8,13 +8,13 @@ the app.
 
 * **Layer A: MIDI.** The pad is a USB MIDI device. Each key sends a MIDI note
   on channel 1 at full velocity (note on when pressed, note off when released).
-* **Layer B: keyboard keys.** F13–F24, plus Ctrl/Shift versions. No normal
-  program uses these keys, so they never clash with typing.
+* **Layer B: numpad.** Framework's numpad layout. Change any key (to a key,
+  a key combination or "open an app") on the app's **Key mapping** page.
 
 Which layer should I use? MIDI (A) is the most reliable in Resolume, and the
 mapping works even when Resolume isn't the active window. Keys (B) work in any
-program that accepts keyboard shortcuts, but only while Resolume is the focused
-window.
+program that accepts keyboard shortcuts, but only while that program is the
+focused window.
 
 ## Layer A: MIDI notes
 
@@ -33,16 +33,18 @@ so you don't need to work this out.
 | 64 (E4) | 65 (F4) | 66 (F#4) | 67 (G4) |
 | 68 (G#4) | 69 (A4) | 70 (A#4) | 71 (B4) |
 
-## Layer B: keys
+## Layer B: numpad
+
+The numpad's big keys (+, Enter, 0) take two of the macropad's squares.
 
 | Col 1 | Col 2 | Col 3 | Col 4 |
 |---|---|---|---|
-| F13 | F14 | F15 | F16 |
-| F17 | F18 | F19 | F20 |
-| F21 | F22 | F23 | F24 |
-| Ctrl+F13 | Ctrl+F14 | Ctrl+F15 | Ctrl+F16 |
-| Ctrl+F17 | Ctrl+F18 | Ctrl+F19 | Ctrl+F20 |
-| Shift+F13 | Shift+F14 | Shift+F15 | Shift+F16 |
+| Esc | Calculator | = | Backspace |
+| Num Lock | / | * | − |
+| 7 | 8 | 9 | + |
+| 4 | 5 | 6 | + |
+| 1 | 2 | 3 | Enter |
+| 0 | 0 | . | Enter |
 
 ## Lighting controls (both corners at the bottom)
 
@@ -68,30 +70,30 @@ action" column as you map.
 
 | Row | Col | Layer A note | Name | Layer B key | Resolume action | Notes |
 |---|---|---|---|---|---|---|
-| 1 | 1 | 48 | C3 | F13 | | top corner: press both = switch layer A/B |
-| 1 | 2 | 49 | C#3 | F14 | |  |
-| 1 | 3 | 50 | D3 | F15 | |  |
-| 1 | 4 | 51 | D#3 | F16 | | top corner: press both = switch layer A/B |
-| 2 | 1 | 52 | E3 | F17 | |  |
-| 2 | 2 | 53 | F3 | F18 | |  |
-| 2 | 3 | 54 | F#3 | F19 | |  |
-| 2 | 4 | 55 | G3 | F20 | |  |
-| 3 | 1 | 56 | G#3 | F21 | |  |
-| 3 | 2 | 57 | A3 | F22 | |  |
-| 3 | 3 | 58 | A#3 | F23 | |  |
-| 3 | 4 | 59 | B3 | F24 | |  |
-| 4 | 1 | 60 | C4 | Ctrl+F13 | |  |
-| 4 | 2 | 61 | C#4 | Ctrl+F14 | |  |
-| 4 | 3 | 62 | D4 | Ctrl+F15 | |  |
-| 4 | 4 | 63 | D#4 | Ctrl+F16 | |  |
-| 5 | 1 | 64 | E4 | Ctrl+F17 | |  |
-| 5 | 2 | 65 | F4 | Ctrl+F18 | |  |
-| 5 | 3 | 66 | F#4 | Ctrl+F19 | |  |
-| 5 | 4 | 67 | G4 | Ctrl+F20 | |  |
-| 6 | 1 | 68 | G#4 | Shift+F13 | | bottom corner: press both = lighting controls |
-| 6 | 2 | 69 | A4 | Shift+F14 | |  |
-| 6 | 3 | 70 | A#4 | Shift+F15 | |  |
-| 6 | 4 | 71 | B4 | Shift+F16 | | bottom corner: press both = lighting controls |
+| 1 | 1 | 48 | C3 | Esc | | top corner: press both = switch layer A/B |
+| 1 | 2 | 49 | C#3 | Calculator | |  |
+| 1 | 3 | 50 | D3 | = | |  |
+| 1 | 4 | 51 | D#3 | Backspace | | top corner: press both = switch layer A/B |
+| 2 | 1 | 52 | E3 | Num Lock | |  |
+| 2 | 2 | 53 | F3 | / | |  |
+| 2 | 3 | 54 | F#3 | * | |  |
+| 2 | 4 | 55 | G3 | − | |  |
+| 3 | 1 | 56 | G#3 | 7 | |  |
+| 3 | 2 | 57 | A3 | 8 | |  |
+| 3 | 3 | 58 | A#3 | 9 | |  |
+| 3 | 4 | 59 | B3 | + | |  |
+| 4 | 1 | 60 | C4 | 4 | |  |
+| 4 | 2 | 61 | C#4 | 5 | |  |
+| 4 | 3 | 62 | D4 | 6 | |  |
+| 4 | 4 | 63 | D#4 | + | |  |
+| 5 | 1 | 64 | E4 | 1 | |  |
+| 5 | 2 | 65 | F4 | 2 | |  |
+| 5 | 3 | 66 | F#4 | 3 | |  |
+| 5 | 4 | 67 | G4 | Enter | |  |
+| 6 | 1 | 68 | G#4 | 0 | | bottom corner: press both = lighting controls |
+| 6 | 2 | 69 | A4 | 0 | |  |
+| 6 | 3 | 70 | A#4 | . | |  |
+| 6 | 4 | 71 | B4 | Enter | | bottom corner: press both = lighting controls |
 
 > **About the corner keys:** each corner key still works alone, but it waits
 > 40 ms to check whether its partner is pressed too. If you need perfect timing
@@ -101,7 +103,7 @@ action" column as you map.
 ## Mapping MIDI in Resolume (layer A)
 
 1. Plug in / install the macropad and make sure it is on **layer A**
-   (top corners cyan).
+   (the pad flashes cyan when you switch to it).
 2. In Resolume open **Preferences → MIDI**. The macropad appears as a MIDI
    input with a name like *Laptop 16 RGB Macropad*. Turn its **Input** on.
 3. Open the **Shortcuts** menu and choose the **MIDI** mapping mode. Pick
@@ -124,11 +126,13 @@ Tips:
 
 ## Mapping keys in Resolume (layer B)
 
-1. Switch the pad to **layer B** (top corners orange).
+1. Switch the pad to **layer B** (the pad flashes orange). Give the keys you
+   want to use their own shortcuts first, on the app's **Key mapping** page:
+   a key combination that Resolume doesn't use yet works best.
 2. Open the **Shortcuts** menu and choose the **Keyboard** mapping mode
    (Composition or Application, as above).
 3. Click a control, then press the pad key. Resolume stores the key with any
-   Ctrl/Shift, so F13, Ctrl+F13 and Shift+F13 are three different shortcuts.
+   Ctrl/Shift/Alt held, so Ctrl+F13 and Shift+F13 are different shortcuts.
 4. Leave the mapping mode from the **Shortcuts** menu.
 
 If Resolume ignores a key in mapping mode, use MIDI (layer A) for that action.

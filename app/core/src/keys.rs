@@ -153,18 +153,16 @@ pub fn note_name(n: u8) -> String {
     format!("{}{}", NOTE[(n % 12) as usize], n as i32 / 12 - 1)
 }
 
-/// What a macropad key sends: (layer A, layer B).
+/// What a macropad key sends by default: (layer A, layer B).
 pub fn macropad_sends(i: usize) -> (String, String) {
     let n = 48 + i as u8;
-    let b = match i {
-        0..=11 => format!("F{}", 13 + i),
-        12..=19 => format!("Ctrl + F{}", i + 1),
-        _ => format!("Shift + F{}", i - 7),
-    };
-    (format!("MIDI note {n} ({}), channel 1", note_name(n)), b)
+    (
+        format!("MIDI note {n} ({}), channel 1", note_name(n)),
+        crate::keycodes::label(crate::keycodes::MACROPAD_DEFAULT[1][i]),
+    )
 }
 
-/// RGB macropad keys, legends for layer 0 (MIDI) or 1 (F-keys).
+/// RGB macropad keys, legends for layer 0 (MIDI) or 1 (numpad).
 pub fn macropad_keys(layer: u8) -> Vec<KeyDef> {
     (0..24)
         .map(|i| {
@@ -172,12 +170,11 @@ pub fn macropad_keys(layer: u8) -> Vec<KeyDef> {
             let (top, main) = if layer == 0 {
                 let n = 48 + i as u8;
                 (n.to_string(), note_name(n))
-            } else if i < 12 {
-                (String::new(), format!("F{}", 13 + i))
-            } else if i < 20 {
-                ("Ctrl".into(), format!("F{}", i + 1))
             } else {
-                ("Shift".into(), format!("F{}", i - 7))
+                (
+                    String::new(),
+                    crate::keycodes::short(crate::keycodes::MACROPAD_DEFAULT[1][i]),
+                )
             };
             KeyDef {
                 top,
@@ -443,9 +440,9 @@ mod tests {
         assert!(module_keys(SideModule::None, 0).is_empty());
         assert_eq!(macropad_keys(0)[0].main, "C3");
         assert_eq!(macropad_keys(0)[23].top, "71");
-        assert_eq!(macropad_keys(1)[0].main, "F13");
-        assert_eq!(macropad_keys(1)[23].top, "Shift");
-        assert_eq!(macropad_sends(12).1, "Ctrl + F13");
+        assert_eq!(macropad_keys(1)[0].main, "Esc");
+        assert_eq!(macropad_keys(1)[8].main, "7");
+        assert_eq!(macropad_sends(4).1, "Num Lock");
     }
 
     #[test]

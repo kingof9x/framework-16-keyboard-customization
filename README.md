@@ -30,7 +30,7 @@ the Windows app.
 
 **Macropad** (details in [`resolume/MAPPING.md`](resolume/MAPPING.md))
 * **Layer A:** 24 MIDI notes (notes 48–71). The pad shows up as a USB MIDI device.
-* **Layer B:** F13–F24, Ctrl+F13–F20 and Shift+F13–F16.
+* **Layer B:** Framework's numpad layout. Change any key in the app.
 * Press the **two top corner keys together** to switch layers. The whole pad
   flashes cyan (A) or orange (B). The app can make the top corners keep that
   color.
@@ -40,17 +40,20 @@ the Windows app.
 * Brightness matches the keyboard's (Framework's firmware drives the macropad
   LEDs harder).
 
-**App** (Home, Show, Effects, Keys, Macropad, Your setup, Firmware, Settings)
-* A live picture of your keyboard and side module, lit with the same effect
-  formulas the firmware uses. Nothing changes on the hardware until you press
-  **Send to devices**.
+**App** (Home, Lighting, Key mapping, Macropad, Your setup, Firmware, Settings)
+* A picture of your keyboard and side module at the top of the page, lit with
+  the same effect formulas the firmware uses. Changes show on the devices
+  **live**; **Save as default** keeps them after a restart.
 * **Your setup:** keyboard Clear RGB, Black RGB, or Black with white backlight;
-  side module None, RGB macropad, or Numpad, on the left or right.
-* **Show:** try any effect across both devices as one surface, and paint keys
-  with your own colors.
-* **Effects:** a separate effect for each device, or **Join into one device**.
-  Full color picker (any color the LEDs can make), speed and brightness.
-* **Keys:** change what any keyboard or macropad key does (with or without
+  side module None, RGB macropad, or Numpad, on the left or right. The app
+  sees whether a macropad or numpad is plugged in, and remembers the keyboard
+  type for each keyboard (by its serial number).
+* **Lighting:** change both devices as one surface, or each on its own. All
+  44 effects, a full color picker (type or paste a color code), speed and
+  brightness, painted keys (steady, brightness following the effect, or
+  **tint**: the effect's colors shifted by the painted color), and sliders to
+  **match the brightness** of the keyboard and macropad.
+* **Key mapping:** change what any keyboard or macropad key does (with or without
   Fn), turn keys off, or make a key **open an app**. Changes are saved on the
   device. Turn the Fn lighting keys off, and set up the macropad's corner
   combos.
@@ -141,24 +144,24 @@ is expected.
 1. Run the installer, or double-click `framework-16-keyboard-control.exe`.
    The first time, Windows may say *"Windows protected your PC"* because the
    app isn't signed. Click **More info → Run anyway**.
-2. At the top, both devices should show **connected (f16custom firmware)**.
-   *"found, but not running the f16custom firmware"* means you still need to
-   flash that device.
-3. Pick **Your setup** at the top: which keyboard you have, which side module
-   (the app detects a macropad by itself) and which side it's on. The app
-   remembers it.
+2. At the bottom left, both devices should show **Connected**. *"Needs the
+   f16custom firmware"* means you still need to flash that device.
+3. Open **Your setup**: pick which keyboard you have (clear or black keys)
+   and which side the module is on. The app finds the macropad or numpad by
+   itself, and remembers the keyboard type for that keyboard.
 4. The tabs:
-   * **Show:** pick an effect (all 44 built-in effects, "Off, painted keys
-     only", or the three app-drawn ones). Set color, speed and brightness. In
-     the preview, effects run across the keyboard and side module as one
-     surface. Under **Key colors**, pick a color and click or drag across keys
-     to paint them. **Painted keys still react to the effect** makes them
-     brighten and dim with the effect. Press **Send to devices** to try it on
-     the hardware, or **Save as default** to keep it after a restart.
-   * **Effects:** an effect, color, speed and brightness for each device.
-     **Join into one device** makes one card drive both, running as one
-     surface. **Copy to** copies one device's settings to the other.
-   * **Keys:** click a key in the picture, then pick **Framework default**,
+   * **Lighting:** under **Change**, pick **Both, joined** (one effect
+     across both, as one surface), **Keyboard** or **Macropad**. Pick an
+     effect (all 44 built-in effects, "Off, painted keys only", or the three
+     app-drawn ones), its color, speed and brightness. Everything shows on the
+     devices as you change it. **Save as default** keeps it after a restart.
+     Under **Key colors**, pick a color and click or drag across keys to paint
+     them (click a painted key again to recolor it). Choose how painted keys
+     behave while an effect runs: steady, brighten and dim with it, or
+     **tint**. **Match the brightness of the two devices** has LED power and
+     red/green/blue sliders per device, and can show plain white on both
+     while you adjust.
+   * **Key mapping:** click a key in the picture, then pick **Framework default**,
      **Nothing** (turned off), **A key** (with Ctrl, Shift, Alt or Super if you
      like) or **Open an app** (pick the program). **Keyboard shows** switches
      between what keys do on their own and with **Fn** held. Changed keys are
@@ -166,7 +169,7 @@ is expected.
      **Fn lighting keys** switch and the macropad's **corner combos** (turn
      each off, or give it another job). **Reset all keys** goes back to
      Framework's layout.
-   * **Macropad:** switch layer A (MIDI) or B (F-keys); click a macropad key in
+   * **Macropad:** switch layer A (MIDI) or B (numpad); click a macropad key in
      the picture to see what it sends. **Layer color on the top corners**
      keeps the corners cyan/orange; off, they follow the effect.
    * **Firmware:** restart a device into flashing mode.
@@ -191,8 +194,8 @@ The app needs no admin rights. Without the installer, you can keep the
 starting the program, so it must be running (in the notification area is
 enough). On another computer without the app those keys do nothing.
 
-**Macropad brightness:** if it still looks brighter or dimmer than the
-keyboard, use **Macropad brightness** on the Effects page.
+**Brightness:** if the macropad looks brighter or dimmer than the keyboard,
+use **Match the brightness of the two devices** on the Lighting page.
 
 ## 5. Map the macropad in Resolume
 

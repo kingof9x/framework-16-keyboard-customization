@@ -30,7 +30,7 @@ user = codes["QK_USER"]
 for i, n in enumerate(["KC_SCRN", "FN_LOCK", "KC_CPLT", "PAD_SWAP", "PAD_LIGHT"]):
     codes[n] = user + i
 codes["_______"] = codes["KC_TRANSPARENT"]
-MODS = {"LCTL": 0x0100, "LSFT": 0x0200, "LALT": 0x0400, "LGUI": 0x0800, "C_F": 0x0100, "S_F": 0x0200}
+MODS = {"LCTL": 0x0100, "LSFT": 0x0200, "LALT": 0x0400, "LGUI": 0x0800}
 LAYERS = {"_FN": 1, "_FN_LOCK": 2, "_FM": 3}
 
 
@@ -112,6 +112,11 @@ NAMED = [
     ("Symbols", "KC_QUOT", "' and \\\"", "'"), ("Symbols", "KC_GRV", "` and ~", "`"),
     ("Symbols", "KC_COMM", ", and <", ","), ("Symbols", "KC_DOT", ". and >", "."),
     ("Symbols", "KC_SLSH", "/ and ?", "/"),
+    ("Numpad", "KC_NUM", "Num Lock", "Num"),
+    *[("Numpad", f"KC_P{n}", f"Numpad {n}", n) for n in "0123456789"],
+    ("Numpad", "KC_PSLS", "Numpad /", "/"), ("Numpad", "KC_PAST", "Numpad *", "*"),
+    ("Numpad", "KC_PMNS", "Numpad -", "-"), ("Numpad", "KC_PPLS", "Numpad +", "+"),
+    ("Numpad", "KC_PDOT", "Numpad .", "."), ("Numpad", "KC_PENT", "Numpad Enter", "Enter"),
     ("Editing", "KC_ENT", "Enter", "Enter"), ("Editing", "KC_ESC", "Esc", "Esc"),
     ("Editing", "KC_BSPC", "Backspace", "Bksp"), ("Editing", "KC_TAB", "Tab", "Tab"),
     ("Editing", "KC_SPC", "Space", "Space"), ("Editing", "KC_DEL", "Delete", "Del"),
@@ -187,7 +192,7 @@ pub const KEYBOARD_DEFAULT: [[u16; 78]; 4] = [
 /// Macropad: (matrix row, column) of each key, top left to bottom right.
 pub const MACROPAD_MATRIX: [(u8, u8); 24] = {arr(pad_matrix, lambda p: f"({p[0]}, {p[1]})")};
 pub const MACROPAD_MATRIX_SIZE: (u8, u8) = (4, 8);
-/// Macropad default keymap, layers A (MIDI) and B (F-keys).
+/// Macropad default keymap, layers A (MIDI) and B (numpad).
 pub const MACROPAD_DEFAULT: [[u16; 24]; 2] = [
 {chr(10).join("    " + arr(l, lambda c: f"0x{c:04X}") + "," for l in pad_layers[:2])}
 ];

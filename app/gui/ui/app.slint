@@ -1,13 +1,12 @@
 // The Framework 16 Keyboard Control window, laid out like White Rabbit (and the Windows 11 Settings
 // app): the menu on the left, the page on the right with its title above it. The bottom of the menu
-// shows the devices and picks which ones Send to devices acts on.
+// shows which devices are connected.
 import { ScrollView } from "std-widgets.slint";
 import { Theme, ThemeSync } from "theme.slint";
 import { App, DeviceRow, Legend, EffectItem, EffectGroup } from "state.slint";
-import { SectionTitle, CheckBox, Hint } from "widgets.slint";
+import { SectionTitle, Hint } from "widgets.slint";
 import { HomePage } from "pages/home.slint";
-import { ShowPage } from "pages/show.slint";
-import { EffectsPage } from "pages/effects.slint";
+import { LightingPage } from "pages/lighting.slint";
 import { MacropadPage } from "pages/macropad.slint";
 import { SetupPage } from "pages/setup.slint";
 import { FirmwarePage } from "pages/firmware.slint";
@@ -106,9 +105,8 @@ export component AppWindow inherits Window {
 
     property <[{key: string, label: string, icon: image}]> nav: [
         { key: "home", label: "Home", icon: @image-url("icons/home.svg") },
-        { key: "show", label: "Show", icon: @image-url("icons/sparkle.svg") },
-        { key: "effects", label: "Effects", icon: @image-url("icons/dark_theme.svg") },
-        { key: "keys", label: "Keys", icon: @image-url("icons/key_edit.svg") },
+        { key: "lighting", label: "Lighting", icon: @image-url("icons/sparkle.svg") },
+        { key: "keys", label: "Key mapping", icon: @image-url("icons/key_edit.svg") },
         { key: "macropad", label: "Macropad", icon: @image-url("icons/grid.svg") },
         { key: "setup", label: "Your setup", icon: @image-url("icons/keyboard.svg") },
         { key: "firmware", label: "Firmware", icon: @image-url("icons/developer_board.svg") },
@@ -116,7 +114,7 @@ export component AppWindow inherits Window {
     ];
 
     function title-of(p: string) -> string {
-        return p == "home" ? "Home" : p == "show" ? "Show" : p == "effects" ? "Effects" : p == "keys" ? "Keys" : p == "macropad" ? "Macropad"
+        return p == "home" ? "Home" : p == "lighting" ? "Lighting" : p == "keys" ? "Key mapping" : p == "macropad" ? "Macropad"
             : p == "setup" ? "Your setup" : p == "firmware" ? "Firmware" : p == "settings" ? "Settings" : "";
     }
 
@@ -145,7 +143,7 @@ export component AppWindow inherits Window {
                 clicked => { App.page = item.key; }
             }
             Rectangle { vertical-stretch: 1; }
-            // The devices, and which ones Send to devices acts on
+            // The devices and what the app found
             VerticalLayout {
                 padding-left: 10px;
                 padding-right: 6px;
@@ -153,21 +151,14 @@ export component AppWindow inherits Window {
                 vertical-stretch: 0;
                 alignment: end;
                 spacing: 2px;
-                SectionTitle { text: "Send to"; }
-                for d[i] in App.devices: VerticalLayout {
-                    CheckBox {
-                        text: d.name;
-                        enabled: d.ok;
-                        checked: d.checked && d.ok;
-                        toggled(on) => { App.device-checked(i, on); }
-                    }
-                    HorizontalLayout {
-                        padding-left: 30px;
-                        Text {
-                            text: d.status;
-                            color: d.ok ? Theme.text2 : Theme.warn;
-                            font-size: Theme.caption;
-                        }
+                SectionTitle { text: "Devices"; }
+                for d in App.devices: VerticalLayout {
+                    Text { text: d.name; color: d.ok ? Theme.text : Theme.text2; }
+                    Text {
+                        text: d.status;
+                        color: d.ok ? Theme.text2 : Theme.warn;
+                        font-size: Theme.caption;
+                        wrap: word-wrap;
                     }
                 }
                 Rectangle { height: 6px; }
@@ -187,7 +178,7 @@ export component AppWindow inherits Window {
             // The keyboard picture stays put above the page, so you can see what you change
             // while the controls scroll underneath. Kept small (at most 760 px wide, about
             // 240 px tall) so the controls get most of the window.
-            if App.page == "show" || App.page == "effects" || App.page == "keys" || App.page == "macropad" || App.page == "setup": Rectangle {
+            if App.page == "lighting" || App.page == "keys" || App.page == "macropad" || App.page == "setup": Rectangle {
                 height: deck.height + 12px;
                 deck := Deck {
                     width: min(parent.width - 12px, 760px);
@@ -202,8 +193,7 @@ export component AppWindow inherits Window {
                     padding-bottom: 20px;
                     alignment: start;
                     if App.page == "home": HomePage { }
-                    if App.page == "show": ShowPage { }
-                    if App.page == "effects": EffectsPage { }
+                    if App.page == "lighting": LightingPage { }
                     if App.page == "keys": KeysPage { }
                     if App.page == "macropad": MacropadPage { }
                     if App.page == "setup": SetupPage { }

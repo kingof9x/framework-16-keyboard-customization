@@ -36,7 +36,8 @@ firmware).
 | `09` | SPAN | `on x_start x_end` | `on x_start x_end`: joined surface, this device's slice of 0–224 (saved) |
 | `0A` | CLOCK | – | `ms` (u32, little endian): sets the effect clock; sent to both joined devices back to back |
 | `0B` | PAINT | request `start`; answer `start count (hue sat on)×count` (max 9) | `start count (hue sat on)×count` (max 8) |
-| `0C` | PAINT_CTRL | `follow count` | `op`: 0 clear, 1 save to EEPROM, 2 follow off, 3 follow on, 4 forget unsaved changes |
+| `0C` | PAINT_CTRL | `follow count` | `op`: 0 clear, 1 save to EEPROM, 2 steady, 3 follow brightness, 4 forget unsaved changes, 5 tint. `follow` answers 0 steady, 1 follow, 2 tint |
+| `0E` | LED_CAL | `current red green blue default_current` | `current red green blue save`: LED driver current and per-color gains (255 = full) |
 | `0D` | COMBOS | `top_on bottom_on top_action(u16 BE) bottom_action(u16 BE) corner_lights` | same (saved). Macropad only; the keyboard answers `FF` |
 
 Notes:
@@ -68,9 +69,17 @@ Notes:
   app keeps the Fn lock layers in step: a top-row change for "normal" also goes
   to layer 3, and one for "with Fn" to layer 2. "Open an app" keys send
   Ctrl+Shift+Alt+F13 to F24, which the Windows app catches.
-* **Macropad brightness:** Framework sets the macropad's LED driver to a higher
+* **Brightness matching:** Framework sets the macropad's LED driver to a higher
   global current than the keyboard's (185 vs 104), so it looked brighter at the
-  same setting. The f16custom macropad firmware sets 104 to match.
+  same setting. The f16custom macropad firmware starts at 104 to match, and
+  LED_CAL lets the app fine-tune each device's current and red/green/blue gains
+  (applied after the effect and painted keys, saved in the paint store's spare
+  bytes). The current is written again every few seconds, since waking from
+  sleep sets the chip back to Framework's value.
+* **Tint:** a painted key takes the effect's color for that LED (read back from
+  the LED driver's frame buffer), turned round the color wheel by the painted
+  hue minus the effect's own hue; its saturation is scaled by the painted
+  saturation.
 * Effect ids with Framework's v0.3.1 list: 1–44 built-in, 45 PC controlled
   (host driven), 46 off with painted keys only.
 * If no FRAME arrives for 3 seconds while host mode is on, the device returns to

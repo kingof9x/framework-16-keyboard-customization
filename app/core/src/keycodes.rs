@@ -346,9 +346,11 @@ mod tests {
         for (i, k) in macropad_keys(0).iter().enumerate() {
             assert_eq!(short(MACROPAD_DEFAULT[0][i]), k.main, "key {i}");
         }
-        assert_eq!(label(MACROPAD_DEFAULT[1][0]), "F13");
-        assert_eq!(label(MACROPAD_DEFAULT[1][12]), "Ctrl + F13");
-        assert_eq!(short(MACROPAD_DEFAULT[1][20]), "S+F13");
+        // Layer B: Framework's numpad layout
+        assert_eq!(label(MACROPAD_DEFAULT[1][0]), "Esc");
+        assert_eq!(label(MACROPAD_DEFAULT[1][4]), "Num Lock");
+        assert_eq!(short(MACROPAD_DEFAULT[1][8]), "7");
+        assert_eq!(label(MACROPAD_DEFAULT[1][23]), "Numpad Enter");
     }
 
     #[test]

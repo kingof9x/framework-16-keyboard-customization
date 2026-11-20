@@ -39,7 +39,10 @@ bool surface_paint_set(const uint8_t *d);
 void surface_paint_ctrl_get(uint8_t *d);
 // Small saved settings kept in the unused end of the paint store (devices with
 // fewer LEDs than HOSTFX_PAINT_MAX_LEDS only). slot < SURFACE_EXTRA_SLOTS.
-#define SURFACE_EXTRA_SLOTS 3
+// Slots 0-2: macropad combos (keymap.c). Slots 3-4: LED calibration (surface.c).
+#define SURFACE_EXTRA_SLOTS 5
 void surface_extra_get(uint8_t slot, uint8_t out[3]);
 void surface_extra_set(uint8_t slot, const uint8_t v[3]);
 bool surface_paint_ctrl(uint8_t op);
+void surface_led_cal_get(uint8_t *d);
+bool surface_led_cal_set(const uint8_t *d);

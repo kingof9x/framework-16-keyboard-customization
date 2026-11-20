@@ -68,6 +68,8 @@ impl Port for HidPort {
 /// A connected keyboard or macropad (VIA raw HID interface).
 pub struct Device {
     pub kind: DeviceKind,
+    /// USB serial number (Framework writes one into each module at the factory).
+    pub serial: Option<String>,
     port: Box<dyn Port>,
 }
 
@@ -81,7 +83,11 @@ pub enum Found {
 
 impl Device {
     pub fn new(kind: DeviceKind, port: Box<dyn Port>) -> Self {
-        Self { kind, port }
+        Self {
+            kind,
+            serial: None,
+            port,
+        }
     }
 
     pub fn send(&self, req: &Report) -> Result<()> {
@@ -144,6 +150,15 @@ impl Device {
     pub fn combos(&self) -> Result<Option<proto::Combos>> {
         match self.transact(&proto::combos_request()) {
             Ok(p) => Ok(Some(proto::parse_combos(&p))),
+            Err(DeviceError::Protocol(ProtocolError::Unsupported)) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// LED calibration; None on firmware without it.
+    pub fn led_cal(&self) -> Result<Option<proto::LedCal>> {
+        match self.transact(&proto::led_cal_request()) {
+            Ok(p) => Ok(Some(proto::parse_led_cal(&p))),
             Err(DeviceError::Protocol(ProtocolError::Unsupported)) => Ok(None),
             Err(e) => Err(e),
         }
@@ -214,9 +229,24 @@ pub fn scan(api: &mut HidApi, skip: &[DeviceKind]) -> Vec<Found> {
             continue;
         };
         seen.push(kind);
-        found.push(identify(Device::new(kind, Box::new(HidPort(hid)))));
+        let mut dev = Device::new(kind, Box::new(HidPort(hid)));
+        dev.serial = d
+            .serial_number()
+            .map(str::to_string)
+            .filter(|s| !s.is_empty());
+        found.push(identify(dev));
     }
     found
+}
+
+/// Framework's numpad (white backlight). The app doesn't talk to it, it only
+/// notices that it is plugged in.
+pub const PID_NUMPAD: u16 = 0x0014;
+
+/// Whether a Framework numpad is plugged in.
+pub fn numpad_present(api: &HidApi) -> bool {
+    api.device_list()
+        .any(|d| d.vendor_id() == proto::VID && d.product_id() == PID_NUMPAD)
 }
 
 /// Asks a freshly opened device whether it runs our firmware.
