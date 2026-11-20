@@ -83,18 +83,20 @@ download and install them.
 Test builds also come from GitHub Actions:
 
 1. Open this repo's **Actions** tab.
-2. Pick the latest green run of **Firmware**. At the bottom, under
-   *Artifacts*, download **firmware-uf2**. Do the same in the **Windows app**
-   workflow and download **framework-16-keyboard-control-windows**. (You must be signed in to
-   GitHub to download artifacts.)
-3. Unzip both. You get:
+2. Pick the latest green run of **Build and release**. At the bottom, under
+   *Artifacts*, download **firmware-uf2**, **framework-16-keyboard-control-windows**
+   and **framework-16-keyboard-control-installer**. (You must be signed in to
+   GitHub to download artifacts.) Pull requests also get these as download
+   links on the PR.
+3. Unzip them. You get:
    * `framework_ansi_f16custom.uf2`: keyboard firmware
    * `framework_macropad_f16custom.uf2`: macropad firmware
-   * `framework-16-keyboard-control.exe`: the app (also the installer in
-     `installer/`)
+   * `framework-16-keyboard-control.exe`: the app on its own
+   * `framework-16-keyboard-control-<version>-setup.exe`: the installer
 
-Pushing a version tag (for example `v0.2.0`) publishes a release with all of
-these files.
+To publish a release: **Actions → Build and release → Run workflow**, and type
+a version in the box (for example `1.0`) or leave "next". Pushing a `v*` tag
+does the same.
 
 ## 2. Flash the firmware
 

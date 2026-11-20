@@ -1,0 +1,184 @@
+name: Build and release
+
+# Builds the Windows app (framework-16-keyboard-control.exe and its installer) and the keyboard + macropad
+# firmware (.uf2) on pushes to main and on pull requests (PR builds appear as download
+# links on the PR).
+# To publish a release with both: Actions > Build and release > Run workflow. The version
+# box says "next" (last release + 1); type a number to choose one, or clear it to only
+# test the build. Pushing a v* tag also makes a release.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths-ignore: ["resolume/**"]
+  pull_request:
+    paths-ignore: ["resolume/**"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version. "next" = last release + 1 (for example 1.3 after 1.2), or type one (for example 2.0). Empty = only test the build, no release.'
+        required: false
+        default: 'next'
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    # Works out the release version: from the Run workflow box ("next" = last release + 1)
+    # or from a pushed v* tag. Empty means "only test the build, no release".
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      tag: ${{ steps.v.outputs.tag }}
+    steps:
+      - id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          INPUT: ${{ inputs.version }}
+        run: |
+          v=""
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            v=$(printf '%s' "$GITHUB_REF_NAME" | grep -oE '[0-9]+(\.[0-9]+)*$' || true)
+          elif [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ -n "$INPUT" ]; then
+            if [ "$INPUT" = next ]; then
+              last=$(gh api "repos/$REPO/releases?per_page=100" --jq '[.[] | select(.draft == false and .prerelease == false) | .tag_name][0] // ""')
+              num=$(printf '%s' "$last" | grep -oE '[0-9]+(\.[0-9]+)*$' || true)
+              if [ -z "$num" ]; then
+                echo "::error::There is no release yet, so there is nothing to add 1 to. Run again and type the first version (for example 1.0)."; exit 1
+              fi
+              v=$(printf '%s' "$num" | awk -F. -v OFS=. '{$NF=$NF+1; print}')
+              echo "Last release: ${last:-none}"
+            else
+              v="${INPUT#[vV]}"
+            fi
+          fi
+          if [ -n "$v" ] && ! printf '%s' "$v" | grep -qE '^[0-9]+(\.[0-9]+)*$'; then
+            echo "::error::'$v' is not a version number. Use numbers like 1.4 or 2.0.1, or 'next'."; exit 1
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "tag=${v:+v$v}" >> "$GITHUB_OUTPUT"
+          if [ -n "$v" ]; then echo "### Releasing v$v" >> "$GITHUB_STEP_SUMMARY"; else echo "### Test build only, no release" >> "$GITHUB_STEP_SUMMARY"; fi
+
+  app:
+    needs: version
+    name: Test + build framework-16-keyboard-control.exe
+    runs-on: windows-latest
+    env:
+      CARGO_TERM_COLOR: always
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+      - name: Lint
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Unit tests (effect math + HID message encoding)
+        run: cargo test --workspace
+
+      - name: Set the release version
+        if: needs.version.outputs.version != ''
+        shell: bash
+        run: |
+          v="${{ needs.version.outputs.version }}"
+          case "$v" in *.*.*) ;; *.*) v="$v.0" ;; *) v="$v.0.0" ;; esac
+          sed -i -E '0,/^version = ".*"/s//version = "'"$v"'"/' Cargo.toml
+          # Both workspace packages share this version, so update both in Cargo.lock
+          # (otherwise --locked below refuses to build)
+          awk -v v="$v" '(prev=="name = \"framework-16-keyboard-control\"" || prev=="name = \"f16-core\"") && /^version = / {$0="version = \"" v "\""} {print; prev=$0}' Cargo.lock > Cargo.lock.new && mv Cargo.lock.new Cargo.lock
+          grep -m1 '^version' Cargo.toml
+
+      - name: Build release exe
+        run: cargo build --release --locked
+
+      - name: Build installer (Inno Setup)
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+          }
+          & $iscc "/DAppVersion=$version" installer\installer.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: framework-16-keyboard-control-windows
+          path: app/target/release/framework-16-keyboard-control.exe
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: framework-16-keyboard-control-installer
+          path: app/target/installer/*-setup.exe
+          if-no-files-found: error
+
+  firmware:
+    needs: version
+    name: Build keyboard + macropad UF2
+    runs-on: ubuntu-24.04
+    # Framework's QMK v0.3.1 Python tooling needs Python < 3.12 (it uses ast.Num),
+    # so we don't use the current qmkfm/qmk_cli container.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ARM toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi libnewlib-arm-none-eabi
+
+      - name: Download Framework's QMK firmware source
+        run: FETCH_ONLY=1 ./firmware/build.sh
+
+      - name: Install QMK Python requirements
+        run: pip install qmk -r firmware/.qmk_firmware/requirements.txt
+
+      - name: Build
+        run: ./firmware/build.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-uf2
+          path: firmware/out/*.uf2
+          if-no-files-found: error
+
+  release:
+    name: Publish the release
+    if: needs.version.outputs.version != ''
+    needs: [version, app, firmware]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.version.outputs.tag }}
+          name: Framework 16 keyboard ${{ needs.version.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          files: |
+            out/framework-16-keyboard-control.exe
+            out/*-setup.exe
+            out/*.uf2
