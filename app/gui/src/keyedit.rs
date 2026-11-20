@@ -186,6 +186,7 @@ impl State {
     pub fn sync_background(&mut self) {
         self.bg.set_apps(self.s.apps.clone());
         self.bg.set_tray(self.s.tray && crate::HAS_TRAY);
+        self.bg.set_audio_hotkey(self.s.audio_hotkey);
         let auto = self.s.autostart_on() && crate::HAS_TRAY;
         if self.ke.last_autostart != Some(auto) {
             crate::winsys::set_autostart(auto);

@@ -16,6 +16,8 @@ export component HomePage inherits VerticalLayout {
     SectionTitle { text: "Lights"; }
     Link { key: "lighting"; icon: @image-url("../icons/sparkle.svg"); title: "Lighting";
         help: App.effects-summary + ". Changes show live; paint keys with your own colors."; }
+    Link { key: "audio"; icon: @image-url("../icons/dark_theme.svg"); title: "Audio";
+        help: App.audio-on ? "On: the lights follow the music. Ctrl+Alt+Shift+M turns it off." : "Light shows that follow the music. Ctrl+Alt+Shift+M turns them on."; }
     Link { key: "keys"; icon: @image-url("../icons/key_edit.svg"); title: "Key mapping";
         help: App.keys-changed == 0 ? "Change what any key does, turn keys off, or make a key open an app." : App.keys-changed == 1 ? "1 key changed from the Framework default." : App.keys-changed + " keys changed from the Framework default."; }
     if App.has-module: Card {

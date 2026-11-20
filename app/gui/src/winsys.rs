@@ -11,6 +11,8 @@
 pub enum TrayEvent {
     Open,
     Quit,
+    /// Ctrl+Alt+Shift+M: audio mode on or off (the same shortcut as White Rabbit's).
+    AudioHotkey,
 }
 
 #[cfg(windows)]
@@ -32,6 +34,7 @@ mod stub {
         }
         pub fn set_apps(&self, _apps: Vec<String>) {}
         pub fn set_tray(&self, _on: bool) {}
+        pub fn set_audio_hotkey(&self, _on: bool) {}
         pub fn close(&self) {}
     }
 
@@ -63,7 +66,8 @@ mod imp {
         GetOpenFileNameW, OFN_FILEMUSTEXIST, OFN_NOCHANGEDIR, OFN_PATHMUSTEXIST, OPENFILENAMEW,
     };
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-        RegisterHotKey, UnregisterHotKey, MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, MOD_SHIFT, VK_F13,
+        GetAsyncKeyState, RegisterHotKey, UnregisterHotKey, MOD_ALT, MOD_CONTROL, MOD_NOREPEAT,
+        MOD_SHIFT, VK_CONTROL, VK_F13, VK_MENU, VK_SHIFT,
     };
     use windows_sys::Win32::UI::Shell::{
         ShellExecuteW, Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE,
@@ -73,6 +77,12 @@ mod imp {
 
     const WM_TRAY: u32 = WM_APP + 1;
     const WM_SYNC: u32 = WM_APP + 2;
+    const WM_AUDIO_HOTKEY: u32 = WM_APP + 3;
+    const VK_M: u32 = 0x4D;
+
+    /// Where the keyboard hook posts the shortcut (the hidden window), and whether M is down.
+    static HOOK_HWND: AtomicIsize = AtomicIsize::new(0);
+    static M_DOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
     const MENU_OPEN: usize = 1;
     const MENU_QUIT: usize = 2;
     const RUN_KEY: &str = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
@@ -86,6 +96,7 @@ mod imp {
     struct Wanted {
         apps: Vec<String>,
         tray: bool,
+        audio_hotkey: bool,
     }
 
     struct ThreadState {
@@ -94,6 +105,7 @@ mod imp {
         apps: Vec<String>,
         tray_shown: bool,
         icon: HICON,
+        hook: HHOOK,
     }
 
     thread_local! {
@@ -132,6 +144,13 @@ mod imp {
 
         pub fn set_tray(&self, on: bool) {
             self.wanted.lock().unwrap().tray = on;
+            self.sync();
+        }
+
+        /// Watch for Ctrl+Alt+Shift+M (audio mode). It is watched rather than registered as a
+        /// hotkey, so White Rabbit, which registers the same shortcut, still gets it too.
+        pub fn set_audio_hotkey(&self, on: bool) {
+            self.wanted.lock().unwrap().audio_hotkey = on;
             self.sync();
         }
 
@@ -184,9 +203,11 @@ mod imp {
                     apps: vec![String::new(); APP_SLOTS],
                     tray_shown: false,
                     icon: app_icon(),
+                    hook: std::ptr::null_mut(),
                 })
             });
             hwnd_out.store(hwnd as isize, Ordering::Release);
+            HOOK_HWND.store(hwnd as isize, Ordering::Release);
             sync(hwnd);
             let mut msg: MSG = std::mem::zeroed();
             while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
@@ -216,12 +237,27 @@ mod imp {
         let plan = STATE.with(|s| {
             let mut s = s.try_borrow_mut().ok()?;
             let st = s.as_mut()?;
-            let (apps, tray) = {
+            let (apps, tray, audio_hotkey) = {
                 let w = st.wanted.lock().unwrap();
                 let mut apps = w.apps.clone();
                 apps.resize(APP_SLOTS, String::new());
-                (apps, w.tray)
+                (apps, w.tray, w.audio_hotkey)
             };
+            // The keyboard hook is set up and removed right here: neither call sends
+            // messages back to this window.
+            if audio_hotkey && st.hook.is_null() {
+                st.hook = unsafe {
+                    SetWindowsHookExW(
+                        WH_KEYBOARD_LL,
+                        Some(keyboard_hook),
+                        GetModuleHandleW(std::ptr::null()),
+                        0,
+                    )
+                };
+            } else if !audio_hotkey && !st.hook.is_null() {
+                unsafe { UnhookWindowsHookEx(st.hook) };
+                st.hook = std::ptr::null_mut();
+            }
             let hotkeys: Vec<(usize, bool)> = st
                 .apps
                 .iter()
@@ -295,6 +331,10 @@ mod imp {
                 sync(hwnd);
                 0
             }
+            WM_AUDIO_HOTKEY => {
+                send(TrayEvent::AudioHotkey);
+                0
+            }
             WM_HOTKEY => {
                 let slot = wp.wrapping_sub(1);
                 let path = STATE.with(|s| {
@@ -340,6 +380,29 @@ mod imp {
             }
             _ => unsafe { DefWindowProcW(hwnd, msg, wp, lp) },
         }
+    }
+
+    /// Sees every key press (without taking any): Ctrl+Alt+Shift+M toggles audio mode.
+    unsafe extern "system" fn keyboard_hook(code: i32, wp: WPARAM, lp: LPARAM) -> LRESULT {
+        if code == HC_ACTION as i32 {
+            let info = unsafe { &*(lp as *const KBDLLHOOKSTRUCT) };
+            if info.vkCode == VK_M {
+                let msg = wp as u32;
+                if msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN {
+                    let held = |vk: u16| unsafe { GetAsyncKeyState(vk as i32) } < 0;
+                    let first = !M_DOWN.swap(true, Ordering::AcqRel);
+                    if first && held(VK_CONTROL) && held(VK_MENU) && held(VK_SHIFT) {
+                        let h = HOOK_HWND.load(Ordering::Acquire);
+                        if h != 0 {
+                            unsafe { PostMessageW(h as HWND, WM_AUDIO_HOTKEY, 0, 0) };
+                        }
+                    }
+                } else if msg == WM_KEYUP || msg == WM_SYSKEYUP {
+                    M_DOWN.store(false, Ordering::Release);
+                }
+            }
+        }
+        unsafe { CallNextHookEx(std::ptr::null_mut(), code, wp, lp) }
     }
 
     unsafe fn show_menu(hwnd: HWND) {

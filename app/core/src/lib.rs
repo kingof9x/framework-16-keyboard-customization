@@ -3,6 +3,7 @@
 //! keyboard + macropad layout ([`layout`]) and the PC-rendered
 //! "Linked" effects ([`effects`]).
 
+pub mod audio;
 pub mod builtin;
 pub mod effects;
 pub mod keycodes;

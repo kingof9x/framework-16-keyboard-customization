@@ -73,13 +73,15 @@ export component OnOff inherits HorizontalLayout {
 export component SliderRow inherits HorizontalLayout {
     in property <string> label;
     in-out property <int> value;
+    in property <int> minimum: 0;
+    in property <int> maximum: 255;
     callback changed();
     spacing: 12px;
     Body { text: root.label; width: 96px; vertical-alignment: center; }
     Slider {
         horizontal-stretch: 1;
-        minimum: 0;
-        maximum: 255;
+        minimum: root.minimum;
+        maximum: root.maximum;
         value: root.value;
         moved(v) => { root.value = round(v); root.changed(); }
     }

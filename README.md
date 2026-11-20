@@ -40,7 +40,7 @@ the Windows app.
 * Brightness matches the keyboard's (Framework's firmware drives the macropad
   LEDs harder).
 
-**App** (Home, Lighting, Key mapping, Macropad, Your setup, Firmware, Settings)
+**App** (Home, Lighting, Audio, Key mapping, Macropad, Your setup, Firmware, Settings)
 * A picture of your keyboard and side module at the top of the page, lit with
   the same effect formulas the firmware uses. Changes show on the devices
   **live**; **Save as default** keeps them after a restart.
@@ -53,6 +53,12 @@ the Windows app.
   brightness, painted keys (steady, brightness following the effect, or
   **tint**: the effect's colors shifted by the painted color), and sliders to
   **match the brightness** of the keyboard and macropad.
+* **Audio:** light shows that follow the music the PC plays (spectrum bars,
+  centre out, level meter, beat pulse, bass ripples, color wash, strobe),
+  across the keyboard and side module as one surface. **Ctrl+Alt+Shift+M**
+  turns it on and off, the same shortcut as White Rabbit's (switch it off in
+  the Audio page if you like). The sound is measured with White Rabbit's own
+  audio code.
 * **Key mapping:** change what any keyboard or macropad key does (with or without
   Fn), turn keys off, or make a key **open an app**. Changes are saved on the
   device. Turn the Fn lighting keys off, and set up the macropad's corner
@@ -161,6 +167,9 @@ is expected.
      **tint**. **Match the brightness of the two devices** has LED power and
      red/green/blue sliders per device, and can show plain white on both
      while you adjust.
+   * **Audio:** turn on **Audio reactivity** (or press **Ctrl+Alt+Shift+M**),
+     pick a show and set the sensitivity. It listens to whatever the PC is
+     playing. Turning it off puts back what the Lighting page shows.
    * **Key mapping:** click a key in the picture, then pick **Framework default**,
      **Nothing** (turned off), **A key** (with Ctrl, Shift, Alt or Super if you
      like) or **Open an app** (pick the program). **Keyboard shows** switches
