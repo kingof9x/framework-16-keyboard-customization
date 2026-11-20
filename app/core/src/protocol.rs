@@ -62,6 +62,7 @@ pub enum ValueId {
     PaintCtrl = 0x0C,
     Combos = 0x0D,
     LedCal = 0x0E,
+    Shortcuts = 0x0F,
 }
 
 /// Painted keys: what PAINT_CTRL can do.
@@ -408,6 +409,8 @@ pub struct Combos {
     pub bottom_action: u16,
     /// The top corner keys keep the active layer's color (cyan A, orange B).
     pub corner_lights: bool,
+    /// The top combo is the whole top row (four keys) instead of the two corners.
+    pub top_row: bool,
 }
 
 impl Default for Combos {
@@ -418,6 +421,7 @@ impl Default for Combos {
             top_action: 0,
             bottom_action: 0,
             corner_lights: false,
+            top_row: false,
         }
     }
 }
@@ -433,6 +437,7 @@ pub fn parse_combos(p: &[u8]) -> Combos {
         top_action: u16::from_be_bytes([p[2], p[3]]),
         bottom_action: u16::from_be_bytes([p[4], p[5]]),
         corner_lights: p[6] != 0,
+        top_row: p[7] != 0,
     }
 }
 
@@ -449,8 +454,21 @@ pub fn set_combos(c: &Combos) -> Report {
             b[0],
             b[1],
             c.corner_lights as u8,
+            c.top_row as u8,
         ],
     )
+}
+
+// ---------------------------------------------------------------------------
+// Keyboard shortcuts (F12 + arrows)
+// ---------------------------------------------------------------------------
+
+pub fn shortcuts_request() -> Report {
+    get(ValueId::Shortcuts, &[])
+}
+
+pub fn set_shortcuts(on: bool) -> Report {
+    set(ValueId::Shortcuts, &[on as u8])
 }
 
 // ---------------------------------------------------------------------------
@@ -796,6 +814,7 @@ mod tests {
             top_action: 0x0704,
             bottom_action: 0,
             corner_lights: true,
+            top_row: true,
         };
         let r = set_combos(&c);
         assert_eq!(parse_combos(&r[3..]), c);

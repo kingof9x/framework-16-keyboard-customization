@@ -22,7 +22,8 @@ typedef union {
     struct {
         bool    hotkey_lock : 1;
         bool    span_on : 1;   // joined with the other device
-        uint8_t unused : 6;
+        bool    shortcuts_off : 1; // keyboard: F12 + arrow shortcuts turned off
+        uint8_t unused : 5;
         uint8_t span_x0;       // this device's slice of the shared 0..224 surface
         uint8_t span_x1;
     };
@@ -64,6 +65,24 @@ __attribute__((weak)) uint8_t hostfx_get_layer(void) {
 __attribute__((weak)) bool hostfx_set_layer(uint8_t layer) {
     return false;
 }
+__attribute__((weak)) bool pre_process_record_keymap(uint16_t keycode, keyrecord_t *record) {
+    return true;
+}
+__attribute__((weak)) bool hostfx_has_shortcuts(void) {
+    return false;
+}
+
+bool hostfx_shortcuts_get(void) {
+    user_config_load();
+    return !user_config.shortcuts_off;
+}
+
+void hostfx_shortcuts_set(bool on) {
+    user_config_load();
+    user_config.shortcuts_off = !on;
+    surface_config_write(user_config.raw);
+}
+
 __attribute__((weak)) bool hostfx_combos_get(uint8_t *d) {
     return false;
 }
@@ -161,7 +180,7 @@ bool pre_process_record_user(uint16_t keycode, keyrecord_t *record) {
     if (hostfx_hotkey_lock_get() && keycode >= QK_LIGHTING && keycode <= QK_LIGHTING_MAX) {
         return false; // swallow RGB_* / BL_* keys entirely
     }
-    return true;
+    return pre_process_record_keymap(keycode, record);
 }
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
@@ -244,6 +263,10 @@ static bool handle_get(uint8_t value_id, uint8_t *d) {
         case HOSTFX_LED_CAL:
             surface_led_cal_get(d);
             break;
+        case HOSTFX_SHORTCUTS:
+            if (!hostfx_has_shortcuts()) return false;
+            d[0] = hostfx_shortcuts_get();
+            break;
         default:
             break;
     }
@@ -309,6 +332,10 @@ static bool handle_set(uint8_t value_id, uint8_t *d) {
             return hostfx_combos_set(d);
         case HOSTFX_LED_CAL:
             return surface_led_cal_set(d);
+        case HOSTFX_SHORTCUTS:
+            if (!hostfx_has_shortcuts()) return false;
+            hostfx_shortcuts_set(d[0] != 0);
+            return true;
         default:
             return false;
     }

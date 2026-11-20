@@ -100,6 +100,88 @@ uint8_t hostfx_device_kind(void) {
     return HOSTFX_KIND_KEYBOARD;
 }
 
+// ---------------------------------------------------------------------------
+// F12 shortcuts: hold F12 and press
+//   Right / Left  next / previous lighting effect (not saved)
+//   Down          back to the saved effect
+//   Up            Ctrl+Alt+Shift+M: audio mode on/off in the PC app (and White Rabbit)
+// F12 is matched by its position, so it works whatever F12 is set to send. F12's
+// own job happens when it is let go without an arrow (so it no longer repeats
+// when held).
+// ---------------------------------------------------------------------------
+
+#define F12_ROW 3
+#define F12_COL 13
+#define LEFT_ROW 6
+#define LEFT_COL 11
+#define UP_ROW 1
+#define UP_COL 13
+#define DOWN_ROW 1
+#define DOWN_COL 8
+#define RIGHT_ROW 2
+#define RIGHT_COL 15
+
+static bool     f12_held    = false;
+static bool     f12_used    = false; // an arrow was pressed while F12 was held
+static uint16_t f12_keycode = KC_NO; // what F12 sends, from when it went down
+
+bool hostfx_has_shortcuts(void) {
+    return true;
+}
+
+static bool at(keyrecord_t *record, uint8_t row, uint8_t col) {
+    return record->event.key.row == row && record->event.key.col == col;
+}
+
+static void step_effect(bool forward) {
+    // Skip the PC-controlled effect: on its own it shows nothing
+    for (uint8_t tries = 0; tries < 3; tries++) {
+        if (forward) {
+            rgb_matrix_step_noeeprom();
+        } else {
+            rgb_matrix_step_reverse_noeeprom();
+        }
+        if (rgb_matrix_get_mode() != RGB_MATRIX_CUSTOM_HOST_DRIVEN) break;
+    }
+}
+
+bool pre_process_record_keymap(uint16_t keycode, keyrecord_t *record) {
+    if (!IS_KEYEVENT(record->event) || !hostfx_shortcuts_get()) return true;
+    bool pressed = record->event.pressed;
+    if (at(record, F12_ROW, F12_COL)) {
+        if (pressed) {
+            f12_held    = true;
+            f12_used    = false;
+            f12_keycode = keycode;
+        } else {
+            f12_held = false;
+            if (!f12_used && f12_keycode != KC_NO && f12_keycode != KC_TRNS) {
+                tap_code16(f12_keycode); // F12 on its own: do its normal job
+            }
+        }
+        return false;
+    }
+    if (!f12_held) return true;
+    bool left = at(record, LEFT_ROW, LEFT_COL), right = at(record, RIGHT_ROW, RIGHT_COL);
+    bool up = at(record, UP_ROW, UP_COL), down = at(record, DOWN_ROW, DOWN_COL);
+    if (!(left || right || up || down)) return true;
+    if (pressed) {
+        f12_used = true;
+        // The lighting shortcuts follow the "Fn lighting keys" switch, and leave the
+        // PC alone while it is drawing (audio mode, app effects)
+        bool lights_ok = !hostfx_hotkey_lock_get() && !hostfx_frames_fresh();
+        if ((left || right) && lights_ok) {
+            step_effect(right);
+        } else if (down && lights_ok) {
+            rgb_matrix_reload_from_eeprom();
+            surface_paint_reload();
+        } else if (up) {
+            tap_code16(LCTL(LALT(LSFT(KC_M))));
+        }
+    }
+    return false; // the arrow itself isn't typed
+}
+
 // Make sure to keep FN Lock even after reset
 bool process_record_keymap(uint16_t keycode, keyrecord_t *record) {
     switch (keycode) {

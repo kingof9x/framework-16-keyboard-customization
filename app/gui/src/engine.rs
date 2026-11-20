@@ -67,6 +67,8 @@ pub enum Command {
     },
     /// Macropad corner combos (saved on the macropad).
     SetCombos(proto::Combos),
+    /// The keyboard's F12 shortcuts on or off (saved on the keyboard).
+    SetShortcuts(bool),
     Rescan,
     Shutdown,
 }
@@ -98,6 +100,8 @@ pub struct DeviceStatus {
     pub combos: Option<proto::Combos>,
     /// LED calibration; None on older firmware.
     pub led_cal: Option<proto::LedCal>,
+    /// Keyboard F12 shortcuts on/off; None on the macropad and older firmware.
+    pub shortcuts: Option<bool>,
     pub serial: Option<String>,
 }
 
@@ -153,6 +157,7 @@ struct Open {
     keymap: Option<Keymap>,
     combos: Option<proto::Combos>,
     led_cal: Option<proto::LedCal>,
+    shortcuts: Option<bool>,
 }
 
 pub struct EngineHandle {
@@ -472,6 +477,17 @@ impl Engine {
                     }
                 }
             }
+            Command::SetShortcuts(on) => {
+                if let Some(o) = self.open.get_mut(&key(DeviceKind::Keyboard)) {
+                    match o.dev.transact(&proto::set_shortcuts(on)) {
+                        Ok(_) => {
+                            o.shortcuts = Some(on);
+                            self.refresh();
+                        }
+                        Err(e) => self.fail(DeviceKind::Keyboard, e),
+                    }
+                }
+            }
             Command::SetCombos(c) => {
                 if let Some(o) = self.open.get_mut(&key(DeviceKind::Macropad)) {
                     match o.dev.transact(&proto::set_combos(&c)) {
@@ -547,6 +563,11 @@ impl Engine {
                     }
                     let keymap = dev.keymap().ok();
                     let led_cal = dev.led_cal().ok().flatten();
+                    let shortcuts = if kind == DeviceKind::Keyboard {
+                        dev.shortcuts().ok().flatten()
+                    } else {
+                        None
+                    };
                     let combos = if kind == DeviceKind::Macropad {
                         dev.combos().ok().flatten()
                     } else {
@@ -561,6 +582,7 @@ impl Engine {
                             keymap,
                             combos,
                             led_cal,
+                            shortcuts,
                         },
                     );
                     added = true;
@@ -614,6 +636,7 @@ impl Engine {
                             keymap: o.keymap.clone(),
                             combos: o.combos,
                             led_cal: o.led_cal,
+                            shortcuts: o.shortcuts,
                             serial: o.dev.serial.clone(),
                         }),
                     ));

@@ -15,6 +15,8 @@
 #define COMBO_ONLY_FROM_LAYER 2
 // Each combo can be turned off from the app (combo_should_trigger in keymap.c).
 #define COMBO_SHOULD_TRIGGER
+// The four-key top row combo gets a longer window (get_combo_term in keymap.c).
+#define COMBO_TERM_PER_COMBO
 
 
 // Framework drives the macropad LEDs harder than the keyboard's (global current

@@ -248,4 +248,11 @@ export global App {
     callback audio-hotkey-toggled(bool);
     // Ctrl+Alt+Shift+M (from the shortcut watcher)
     callback audio-shortcut();
+
+    // Keyboard F12 shortcuts, and the macropad's top combo as the whole top row
+    in property <bool> shortcuts-known;
+    in property <bool> shortcuts-on;
+    callback shortcuts-toggled(bool);
+    in property <bool> combo-top-row;
+    callback combo-top-row-chosen(bool);
 }

@@ -71,6 +71,8 @@ pub struct State {
     cal_dirty: [Option<Instant>; 2],
     /// Plain white on both devices while matching their brightness.
     white_test: bool,
+    /// The keyboard's effect at the last look (to notice the F12 shortcuts).
+    last_kb_state: Option<LightState>,
     /// How long the last picture took to draw, and when it was drawn.
     draw_cost: Duration,
     last_draw: Instant,
@@ -750,6 +752,36 @@ fn tick(app: &AppWindow, st: &mut State) {
         push_all(app, st);
     }
 
+    // The keyboard changed its own effect (F12 shortcuts): show it, and give a joined
+    // macropad the same. Ignored right after the app itself sent something.
+    if let Some(d) = ready(&status, DeviceKind::Keyboard) {
+        let now = d.state;
+        let ours = State::state_for(&st.s.kb, d);
+        if let Some(prev) = st.last_kb_state {
+            if now != prev
+                && now != ours
+                && !d.streaming
+                && !st.audio_on
+                && st.last_live.elapsed() > Duration::from_millis(1500)
+                && (1..=44).contains(&now.mode)
+            {
+                st.s.kb = Look {
+                    choice: Choice::Builtin(now.mode),
+                    hue: now.hue,
+                    sat: now.sat,
+                    val: now.val,
+                    speed: now.speed,
+                };
+                if st.joined() {
+                    st.s.module = st.s.kb;
+                }
+                push_all(app, st);
+                st.dirty = true;
+            }
+        }
+        st.last_kb_state = Some(now);
+    }
+
     // Live: send lighting changes a few times a second while they happen
     if st.dirty && st.last_live.elapsed() >= Duration::from_millis(80) {
         st.dirty = false;
@@ -1071,6 +1103,7 @@ fn main() -> Result<(), slint::PlatformError> {
         white_test: false,
         last_detected: None,
         audio_on: false,
+        last_kb_state: None,
         draw_cost: Duration::ZERO,
         last_draw: Instant::now(),
         windows: theme::read_windows(),
@@ -1361,6 +1394,14 @@ fn main() -> Result<(), slint::PlatformError> {
     on!(on_update_auto_toggled, |app, st, on: bool| {
         st.s.auto_update = on;
         app.global::<App>().set_auto_update(on);
+    });
+    on!(on_combo_top_row_chosen, |app, st, on: bool| {
+        keyedit::combo_top_row_chosen(st, on);
+        keyedit::push(&app, st);
+    });
+    on!(on_shortcuts_toggled, |app, st, on: bool| {
+        keyedit::shortcuts_toggled(st, on);
+        keyedit::push(&app, st);
     });
     on!(on_corner_lights_toggled, |app, st, on: bool| {
         keyedit::corner_lights_toggled(st, on);
