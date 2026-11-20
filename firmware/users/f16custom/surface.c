@@ -44,6 +44,11 @@ void surface_apply_span(bool on, uint8_t x0, uint8_t x1) {
     }
 }
 
+// An LED's own x position, as if the devices were not joined.
+uint8_t surface_led_x(uint8_t i) {
+    return orig_saved ? orig_x[i] : g_led_config.point[i].x;
+}
+
 void surface_span_get(uint8_t *d) {
     d[0] = span_on;
     d[1] = span_x0;

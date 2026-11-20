@@ -28,7 +28,7 @@ firmware).
 | `01` | INFO | `'F' 'X' version(2) led_count effect_count host_effect_id kind(0=kb,1=pad) hotkey_lock layer(0xFF=n/a) max_brightness paint_only_effect_id` | – |
 | `02` | STATE | `enabled mode hue sat val speed streaming` | `enabled mode hue sat val speed save` (`save=1` writes EEPROM) |
 | `03` | HOTKEY_LOCK | `on` | `on` (always saved to EEPROM) |
-| `04` | LED_INFO | request `start`; answer `start count (x y flags)×count` (max 9) | – |
+| `04` | LED_INFO | request `start`; answer `start count (x y flags)×count` (max 9). Positions are the real ones, also while joined | – |
 | `05` | FRAME | – | `start count (r g b)×count` (max 8 LEDs per message) |
 | `06` | HOST_MODE | `on` | `1` = show PC frames (not saved), `0` = back to the saved effect |
 | `07` | KEY_EVENTS | `count led_index×count` (presses since the last poll, max 28) | – |

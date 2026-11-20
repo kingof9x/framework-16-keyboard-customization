@@ -154,7 +154,18 @@ impl Device {
         Ok(proto::parse_info(&p)?)
     }
 
+    /// LED positions. For the keyboard and macropad these come from Framework's
+    /// source (built into the app) rather than the device: while the devices are
+    /// joined, the firmware squeezes its positions into its slice of the shared
+    /// surface, and matching keys against those put painted keys on the wrong LEDs.
     pub fn led_points(&self, count: u8) -> Result<Vec<LedPoint>> {
+        let known: &[(u8, u8)] = match self.kind {
+            DeviceKind::Keyboard => &f16_core::keys::KEYBOARD_LEDS,
+            DeviceKind::Macropad => &f16_core::keys::MACROPAD_LEDS,
+        };
+        if known.len() == count as usize {
+            return Ok(f16_core::keys::firmware_leds(known));
+        }
         let mut out = Vec::with_capacity(count as usize);
         for req in proto::led_info_requests(count) {
             out.extend(proto::parse_led_info(&self.transact(&req)?));

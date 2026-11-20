@@ -208,7 +208,7 @@ static bool handle_get(uint8_t value_id, uint8_t *d) {
             uint8_t count = 0;
             for (uint8_t i = 0; i < HOSTFX_LEDS_PER_INFO_MSG && start + i < RGB_MATRIX_LED_COUNT; i++) {
                 uint8_t led       = start + i;
-                d[2 + i * 3 + 0] = g_led_config.point[led].x;
+                d[2 + i * 3 + 0] = surface_led_x(led); // real position, even while joined
                 d[2 + i * 3 + 1] = g_led_config.point[led].y;
                 d[2 + i * 3 + 2] = g_led_config.flags[led];
                 count++;

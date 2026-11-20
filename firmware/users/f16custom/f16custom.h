@@ -27,6 +27,7 @@ void hostfx_host_mode_set(bool on);
 // surface.c: joined surface, effect clock, painted keys
 void surface_apply_span(bool on, uint8_t x0, uint8_t x1);
 void surface_span_get(uint8_t *d);
+uint8_t surface_led_x(uint8_t i);  // x before squeezing for the joined surface
 void surface_set_clock(uint32_t ms);
 void surface_housekeeping(void);
 void     surface_paint_reload(void);
