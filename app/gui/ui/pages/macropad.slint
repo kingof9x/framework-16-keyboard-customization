@@ -13,7 +13,7 @@ export component MacropadPage inherits VerticalLayout {
         HorizontalLayout {
             spacing: 16px;
             RadioButton { text: "A: MIDI notes"; checked: App.layer == 0; clicked => { App.layer-chosen(0); } }
-            RadioButton { text: "B: F13–F24 keys"; checked: App.layer == 1; clicked => { App.layer-chosen(1); } }
+            RadioButton { text: "B: Numpad"; checked: App.layer == 1; clicked => { App.layer-chosen(1); } }
         }
     }
     Card {

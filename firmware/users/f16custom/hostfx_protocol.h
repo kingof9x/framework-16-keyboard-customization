@@ -39,6 +39,9 @@ enum hostfx_value_id {
     HOSTFX_PAINT_CTRL  = 0x0C, // get: [follow, painted count]; set: [op] see hostfx_paint_op
     HOSTFX_COMBOS      = 0x0D, // get/set: [top on, bottom on, top action (u16 BE), bottom action (u16 BE), corner layer lights] (saved)
                                // macropad corner combos; action 0 = built-in job. Keyboard: unhandled
+    HOSTFX_LED_CAL     = 0x0E, // get: [current, red, green, blue, default current]
+                               // set: [current, red, green, blue, save]: LED driver current (0 = default)
+                               // and per-color gains (255 = full), to match the two devices' brightness
 };
 
 enum hostfx_paint_op {
@@ -47,6 +50,14 @@ enum hostfx_paint_op {
     HOSTFX_PAINT_FOLLOW_OFF = 2, // painted keys keep a steady color
     HOSTFX_PAINT_FOLLOW_ON  = 3, // painted keys brighten and dim with the effect
     HOSTFX_PAINT_RELOAD     = 4, // forget unsaved changes
+    HOSTFX_PAINT_TINT       = 5, // painted keys take the effect's color, shifted by their hue
+};
+
+// Painted-key modes (the "follow" byte of PAINT_CTRL and the paint store)
+enum hostfx_paint_mode {
+    HOSTFX_PAINT_MODE_STEADY = 0,
+    HOSTFX_PAINT_MODE_FOLLOW = 1, // brightness follows the effect
+    HOSTFX_PAINT_MODE_TINT   = 2, // color and brightness follow the effect, hue shifted
 };
 
 enum hostfx_device_kind {

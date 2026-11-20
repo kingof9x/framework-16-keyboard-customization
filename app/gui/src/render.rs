@@ -372,7 +372,7 @@ mod tests {
             kb: look,
             module: look,
             paint,
-            follow: true,
+            paint_mode: f16_core::protocol::PaintMode::Follow,
             macropad_layer: 0,
             show_paint_marks: true,
             selected: Some((crate::deck::Dev::Module, 0)),

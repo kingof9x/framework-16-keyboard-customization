@@ -4,6 +4,7 @@ use f16_core::builtin::{self, BuiltinSim, EffectCfg, SimLed};
 use f16_core::effects::{EffectParams, LinkedEffect, Renderer, Rgb};
 use f16_core::keys::{self, KeyDef, SideModule, KEYBOARD_SIZE, MODULE_GRID};
 use f16_core::layout::Point;
+use f16_core::protocol::PaintMode;
 use std::collections::HashMap;
 
 /// What kind of keyboard the user has.
@@ -121,7 +122,7 @@ pub struct Scene<'a> {
     pub kb: Look,
     pub module: Look,
     pub paint: &'a HashMap<(Dev, usize), (u8, u8)>,
-    pub follow: bool,
+    pub paint_mode: PaintMode,
     pub macropad_layer: u8,
     pub show_paint_marks: bool,
     /// The key drawn with an accent outline (Macropad and Keys pages).
@@ -205,6 +206,49 @@ fn geo(setup: &Setup) -> Geo {
 }
 
 /// Joined-surface slices for the firmware: (keyboard, side module).
+/// RGB -> QMK's HSV scale (hue 0..255 in six 43-wide sections), like the firmware's tint.
+pub fn rgb_to_qmk_hsv(c: Rgb) -> (u8, u8, u8) {
+    let (r, g, b) = (c[0] as i32, c[1] as i32, c[2] as i32);
+    let max = r.max(g).max(b);
+    let min = r.min(g).min(b);
+    if max == 0 {
+        return (0, 0, 0);
+    }
+    let delta = max - min;
+    let s = delta * 255 / max;
+    if delta == 0 {
+        return (0, s as u8, max as u8);
+    }
+    let h = if max == r {
+        43 * (g - b) / delta
+    } else if max == g {
+        85 + 43 * (b - r) / delta
+    } else {
+        171 + 43 * (r - g) / delta
+    };
+    (h.rem_euclid(256) as u8, s as u8, max as u8)
+}
+
+/// A painted key's color over the effect's color for that key (same rules as the firmware).
+pub fn paint_color(effect: Rgb, paint: (u8, u8), look: &Look, mode: PaintMode) -> Rgb {
+    let floor = 0.3 * look.val as f32;
+    let (eh, es, ev) = rgb_to_qmk_hsv(effect);
+    let v = (ev as f32).max(floor);
+    if look.choice == Choice::PaintOnly || mode == PaintMode::Steady {
+        return builtin::qmk_hsv(paint.0 as i32, paint.1 as i32, look.val as i32);
+    }
+    if mode == PaintMode::Follow {
+        return builtin::qmk_hsv(paint.0 as i32, paint.1 as i32, v as i32);
+    }
+    let h = eh.wrapping_add(paint.0.wrapping_sub(look.hue));
+    let s = if es == 0 {
+        paint.1
+    } else {
+        (es as u32 * paint.1 as u32 / 255) as u8
+    };
+    builtin::qmk_hsv(h as i32, s as i32, v as i32)
+}
+
 pub fn span_slices(setup: &Setup) -> ((u8, u8), (u8, u8)) {
     let module_w = MODULE_GRID.0 * module_scale();
     builtin::span_slices(KEYBOARD_SIZE.0, module_w, SEAM, setup.module_left)
@@ -487,16 +531,49 @@ impl Preview {
                 continue;
             }
             if let Some(&(h, s)) = scene.paint.get(&(k.dev, k.index)) {
-                let lvl = out[i].iter().copied().max().unwrap_or(0) as f32 / 255.0;
-                let follow = scene.follow && look.choice != Choice::PaintOnly;
-                let v = if follow {
-                    lvl.max(0.3 * look.val as f32 / 255.0) * 255.0
-                } else {
-                    look.val as f32
-                };
-                out[i] = builtin::qmk_hsv(h as i32, s as i32, v as i32);
+                out[i] = paint_color(out[i], (h, s), &look, scene.paint_mode);
             }
         }
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn look(hue: u8) -> Look {
+        Look {
+            choice: Choice::Builtin(13),
+            hue,
+            sat: 255,
+            val: 255,
+            speed: 128,
+        }
+    }
+
+    #[test]
+    fn color_codes_turn_into_the_firmwares_hue() {
+        assert_eq!(rgb_to_qmk_hsv([255, 0, 0]), (0, 255, 255));
+        let (h, s, v) = rgb_to_qmk_hsv(builtin::qmk_hsv(170, 255, 255));
+        assert!((h as i32 - 170).abs() <= 2 && s >= 250 && v == 255);
+        assert_eq!(rgb_to_qmk_hsv([255, 255, 255]).1, 0);
+    }
+
+    #[test]
+    fn tint_shifts_the_effects_color() {
+        let effect = builtin::qmk_hsv(85, 255, 200); // green from the effect
+                                                     // painted the effect's own hue: unchanged
+        let same = paint_color(effect, (10, 255), &look(10), PaintMode::Tint);
+        let (h, _, v) = rgb_to_qmk_hsv(same);
+        assert!((h as i32 - 85).abs() <= 2 && (v as i32 - 200).abs() <= 2);
+        // painted 85 round from the effect's hue: green becomes blue
+        let shifted = paint_color(effect, (95, 255), &look(10), PaintMode::Tint);
+        assert!((rgb_to_qmk_hsv(shifted).0 as i32 - 170).abs() <= 3);
+        // white takes the color out
+        assert_eq!(
+            rgb_to_qmk_hsv(paint_color(effect, (0, 0), &look(10), PaintMode::Tint)).1,
+            0
+        );
     }
 }

@@ -61,6 +61,7 @@ pub enum ValueId {
     Paint = 0x0B,
     PaintCtrl = 0x0C,
     Combos = 0x0D,
+    LedCal = 0x0E,
 }
 
 /// Painted keys: what PAINT_CTRL can do.
@@ -72,6 +73,29 @@ pub enum PaintOp {
     FollowOff = 2,
     FollowOn = 3,
     Reload = 4,
+    Tint = 5,
+}
+
+/// How painted keys look while an effect runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PaintMode {
+    /// A steady color.
+    Steady,
+    /// Their own color, brightening and dimming with the effect.
+    #[default]
+    Follow,
+    /// The effect's color, turned round the color wheel by the painted hue.
+    Tint,
+}
+
+impl PaintMode {
+    pub fn op(self) -> PaintOp {
+        match self {
+            PaintMode::Steady => PaintOp::FollowOff,
+            PaintMode::Follow => PaintOp::FollowOn,
+            PaintMode::Tint => PaintOp::Tint,
+        }
+    }
 }
 
 /// Painted LEDs per PAINT set message (3 + 2 + 8 * 3 = 29 bytes).
@@ -430,6 +454,40 @@ pub fn set_combos(c: &Combos) -> Report {
 }
 
 // ---------------------------------------------------------------------------
+// LED calibration: the LED driver's current and per-color gains
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LedCal {
+    /// LED driver current (the chip's global current setting).
+    pub current: u8,
+    /// Red, green, blue gains, 255 = full.
+    pub gains: [u8; 3],
+    /// The firmware's own current, for "Reset".
+    pub default_current: u8,
+}
+
+pub fn led_cal_request() -> Report {
+    get(ValueId::LedCal, &[])
+}
+
+pub fn parse_led_cal(p: &[u8]) -> LedCal {
+    LedCal {
+        current: p[0],
+        gains: [p[1], p[2], p[3]],
+        default_current: p[4],
+    }
+}
+
+/// `save` keeps it after a restart.
+pub fn set_led_cal(c: &LedCal, save: bool) -> Report {
+    set(
+        ValueId::LedCal,
+        &[c.current, c.gains[0], c.gains[1], c.gains[2], save as u8],
+    )
+}
+
+// ---------------------------------------------------------------------------
 // Joined surface, effect clock, painted keys
 // ---------------------------------------------------------------------------
 
@@ -741,6 +799,13 @@ mod tests {
         };
         let r = set_combos(&c);
         assert_eq!(parse_combos(&r[3..]), c);
+        let cal = LedCal {
+            current: 90,
+            gains: [255, 240, 200],
+            default_current: 0,
+        };
+        let r = set_led_cal(&cal, true);
+        assert_eq!(&r[3..8], &[90, 255, 240, 200, 1]);
     }
 
     #[test]

@@ -40,7 +40,6 @@ export global App {
 
     // Devices, at the bottom of the menu
     in property <[DeviceRow]> devices;
-    callback device-checked(int, bool);
     in property <string> bar-status;
     in property <bool> live;
     in property <string> status;
@@ -78,7 +77,7 @@ export global App {
     in property <color> show-picked;
     in property <string> show-hex;
     in-out property <int> paint-tool;
-    in-out property <bool> follow: true;
+    in-out property <int> paint-mode: 1;   // 0 steady, 1 brightness follows, 2 tint
     in-out property <int> brush-hue;
     in-out property <int> brush-sat;
     in property <color> brush-full;
@@ -200,8 +199,6 @@ export global App {
     // Macropad: top corners keep the layer color; brightness balance (percent)
     in property <bool> corner-lights;
     callback corner-lights-toggled(bool);
-    in-out property <float> pad-balance: 100;
-    callback pad-balance-changed();
 
     // Updates
     in property <string> version;
@@ -212,4 +209,28 @@ export global App {
     callback update-check();
     callback update-install();
     callback update-auto-toggled(bool);
+
+    // Lighting page: what it edits. 0 both (joined), 1 keyboard, 2 side module
+    in-out property <int> target;
+    callback target-chosen(int);
+    callback paint-mode-chosen(int);
+    // Color codes: hue / saturation of "#RRGGBB" on the firmware's scale, -1 if not a color
+    pure callback hex-hue(string) -> int;
+    pure callback hex-sat(string) -> int;
+
+    // Brightness matching: LED driver current and red/green/blue gains per device
+    in property <bool> kb-cal-known;
+    in property <bool> mod-cal-known;
+    in-out property <int> kb-cal-current;
+    in-out property <int> kb-cal-r;
+    in-out property <int> kb-cal-g;
+    in-out property <int> kb-cal-b;
+    in-out property <int> mod-cal-current;
+    in-out property <int> mod-cal-r;
+    in-out property <int> mod-cal-g;
+    in-out property <int> mod-cal-b;
+    in-out property <bool> white-test;
+    callback cal-changed(int);              // 0 keyboard, 1 macropad
+    callback cal-reset(int);
+    callback white-test-toggled(bool);
 }

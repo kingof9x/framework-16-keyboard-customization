@@ -34,7 +34,8 @@ struct SimState {
     span: (bool, u8, u8),
     paint: Vec<[u8; 3]>,
     saved_paint: Vec<[u8; 3]>,
-    follow: bool,
+    paint_mode: u8,
+    led_cal: [u8; 4],
     /// VIA keymap buffer: layers of rows x columns, 2 bytes each (big endian).
     keymap: Vec<u8>,
     combos: [u8; 7],
@@ -70,7 +71,8 @@ impl SimPort {
             span: (false, 0, 224),
             paint: vec![[0; 3]; n],
             saved_paint: vec![[0; 3]; n],
-            follow: true,
+            paint_mode: 1,
+            led_cal: [104, 255, 255, 255],
             keymap: default_buffer(if macropad {
                 Board::Macropad
             } else {
@@ -163,6 +165,7 @@ impl SimState {
         const PAINT: u8 = ValueId::Paint as u8;
         const PAINT_CTRL: u8 = ValueId::PaintCtrl as u8;
         const COMBOS: u8 = ValueId::Combos as u8;
+        const LED_CAL: u8 = ValueId::LedCal as u8;
         if self.host && self.last_frame.elapsed() > Duration::from_secs(3) {
             self.host = false; // same fallback as the firmware
         }
@@ -286,7 +289,7 @@ impl SimState {
                 true
             }
             (true, PAINT_CTRL) => {
-                d[0] = self.follow as u8;
+                d[0] = self.paint_mode;
                 d[1] = self.paint.iter().filter(|p| p[2] != 0).count() as u8;
                 true
             }
@@ -299,8 +302,12 @@ impl SimState {
                     self.saved_paint = self.paint.clone();
                     true
                 }
-                2 | 3 => {
-                    self.follow = d[0] == 3;
+                2 | 3 | 5 => {
+                    self.paint_mode = match d[0] {
+                        2 => 0,
+                        3 => 1,
+                        _ => 2,
+                    };
                     true
                 }
                 4 => {
@@ -309,6 +316,15 @@ impl SimState {
                 }
                 _ => false,
             },
+            (true, LED_CAL) => {
+                d[..4].copy_from_slice(&self.led_cal);
+                d[4] = 104;
+                true
+            }
+            (false, LED_CAL) => {
+                self.led_cal.copy_from_slice(&d[..4]);
+                true
+            }
             (true, COMBOS) if self.macropad => {
                 d[..7].copy_from_slice(&self.combos);
                 true

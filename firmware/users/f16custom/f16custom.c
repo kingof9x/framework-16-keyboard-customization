@@ -241,6 +241,9 @@ static bool handle_get(uint8_t value_id, uint8_t *d) {
             break;
         case HOSTFX_COMBOS:
             return hostfx_combos_get(d);
+        case HOSTFX_LED_CAL:
+            surface_led_cal_get(d);
+            break;
         default:
             break;
     }
@@ -304,6 +307,8 @@ static bool handle_set(uint8_t value_id, uint8_t *d) {
             return surface_paint_ctrl(d[0]);
         case HOSTFX_COMBOS:
             return hostfx_combos_set(d);
+        case HOSTFX_LED_CAL:
+            return surface_led_cal_set(d);
         default:
             return false;
     }

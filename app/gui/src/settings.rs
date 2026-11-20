@@ -5,15 +5,19 @@ use crate::deck::{Choice, Dev, KbType, Look, Setup};
 use f16_core::effects::LinkedEffect;
 use f16_core::keycodes::APP_SLOTS;
 use f16_core::keys::SideModule;
+use f16_core::protocol::PaintMode;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Saved {
     pub setup: Setup,
-    pub follow: bool,
+    /// How painted keys look while an effect runs.
+    pub paint_mode: PaintMode,
+    /// Lighting page: one effect across both devices (joined), or each its own.
     pub join: bool,
-    pub show: Look,
+    /// Lighting page, when not joined: edit the keyboard (false) or the side module (true).
+    pub edit_module: bool,
     pub kb: Look,
     pub module: Look,
     pub brush: (u8, u8),
@@ -26,8 +30,8 @@ pub struct Saved {
     pub tray: bool,
     /// Start with Windows. None = not chosen yet: on once an "Open an app" key is set up.
     pub autostart: Option<bool>,
-    /// Macropad brightness compared to the keyboard's, in percent (50 to 150).
-    pub pad_balance: u8,
+    /// Keyboard type remembered per keyboard (USB serial number).
+    pub kb_types: Vec<(String, KbType)>,
     /// Look for a newer version when the app starts.
     pub auto_update: bool,
 }
@@ -50,10 +54,10 @@ impl Default for Saved {
         };
         Self {
             setup: Setup::default(),
-            follow: true,
-            join: false,
-            show: look(Choice::Builtin(13), 11, 220, 255, 128),
-            kb: look(Choice::Builtin(27), 11, 220, 255, 128),
+            paint_mode: PaintMode::Follow,
+            join: true,
+            edit_module: false,
+            kb: look(Choice::Builtin(13), 11, 220, 255, 128),
             module: look(Choice::Builtin(13), 128, 255, 230, 100),
             brush: (128, 255),
             paint: HashMap::new(),
@@ -61,7 +65,7 @@ impl Default for Saved {
             apps: vec![String::new(); APP_SLOTS],
             tray: true,
             autostart: None,
-            pad_balance: 100,
+            kb_types: vec![],
             auto_update: true,
         }
     }
@@ -137,33 +141,52 @@ fn parse_look(s: &str) -> Option<Look> {
     })
 }
 
-pub fn to_text(s: &Saved) -> String {
-    let mut out = String::new();
-    let kb = match s.setup.kb {
+fn kb_str(t: KbType) -> &'static str {
+    match t {
         KbType::ClearRgb => "clear",
         KbType::BlackRgb => "black-rgb",
         KbType::White => "white",
-    };
+    }
+}
+
+fn parse_kb(v: &str) -> KbType {
+    match v {
+        "black-rgb" => KbType::BlackRgb,
+        "white" => KbType::White,
+        _ => KbType::ClearRgb,
+    }
+}
+
+pub fn to_text(s: &Saved) -> String {
+    let mut out = String::new();
+    let kb = kb_str(s.setup.kb);
     let side = match s.setup.side {
         SideModule::None => "none",
         SideModule::Macropad => "macropad",
         SideModule::Numpad => "numpad",
     };
+    let mode = match s.paint_mode {
+        PaintMode::Steady => "steady",
+        PaintMode::Follow => "follow",
+        PaintMode::Tint => "tint",
+    };
     out += &format!(
-        "keyboard={kb}\nside={side}\nleft={}\nfollow={}\njoin={}\n",
-        s.setup.module_left, s.follow, s.join
+        "keyboard={kb}\nside={side}\nleft={}\npaint-mode={mode}\njoin={}\nedit-module={}\n",
+        s.setup.module_left, s.join, s.edit_module
     );
+    for (serial, t) in &s.kb_types {
+        out += &format!("keyboard-of={} {serial}\n", kb_str(*t));
+    }
     out += &format!(
-        "show={}\nkb={}\nmodule={}\nbrush={} {}\n",
-        look_str(&s.show),
+        "kb={}\nmodule={}\nbrush={} {}\n",
         look_str(&s.kb),
         look_str(&s.module),
         s.brush.0,
         s.brush.1
     );
     out += &format!(
-        "theme={}\ntray={}\npad-balance={}\nauto-update={}\n",
-        s.theme, s.tray, s.pad_balance, s.auto_update
+        "theme={}\ntray={}\nauto-update={}\n",
+        s.theme, s.tray, s.auto_update
     );
     if let Some(a) = s.autostart {
         out += &format!("autostart={a}\n");
@@ -210,16 +233,31 @@ pub fn from_text(text: &str) -> Saved {
                 }
             }
             "left" => s.setup.module_left = v == "true",
-            "follow" => s.follow = v != "false",
+            // older versions: an on/off switch
+            "follow" => {
+                s.paint_mode = if v == "false" {
+                    PaintMode::Steady
+                } else {
+                    PaintMode::Follow
+                }
+            }
+            "paint-mode" => {
+                s.paint_mode = match v {
+                    "steady" => PaintMode::Steady,
+                    "tint" => PaintMode::Tint,
+                    _ => PaintMode::Follow,
+                }
+            }
             "join" => s.join = v == "true",
+            "edit-module" => s.edit_module = v == "true",
+            "keyboard-of" => {
+                if let Some((t, serial)) = v.split_once(' ') {
+                    s.kb_types.push((serial.to_string(), parse_kb(t)));
+                }
+            }
             "theme" if crate::theme::CHOICES.contains(&v) => s.theme = v.to_string(),
             "tray" => s.tray = v != "false",
             "auto-update" => s.auto_update = v != "false",
-            "pad-balance" => {
-                if let Ok(b) = v.parse::<u8>() {
-                    s.pad_balance = b.clamp(50, 150);
-                }
-            }
             "autostart" => s.autostart = Some(v == "true"),
             "app" => {
                 if let Some((n, path)) = v.split_once(' ') {
@@ -230,7 +268,6 @@ pub fn from_text(text: &str) -> Saved {
                     }
                 }
             }
-            "show" => s.show = parse_look(v).unwrap_or(s.show),
             "kb" => s.kb = parse_look(v).unwrap_or(s.kb),
             "module" => s.module = parse_look(v).unwrap_or(s.module),
             "brush" => {
@@ -292,23 +329,25 @@ mod tests {
             },
             ..Default::default()
         };
-        s.join = true;
-        s.follow = false;
-        s.show.choice = Choice::Pc(LinkedEffect::Ripple);
-        s.kb.choice = Choice::PaintOnly;
+        s.join = false;
+        s.edit_module = true;
+        s.paint_mode = PaintMode::Tint;
+        s.kb.choice = Choice::Pc(LinkedEffect::Ripple);
+        s.module.choice = Choice::PaintOnly;
+        s.kb_types.push(("FRAKDEBZ0812".into(), KbType::BlackRgb));
         s.paint.insert((Dev::Keyboard, 30), (128, 255));
         s.paint.insert((Dev::Module, 3), (0, 0));
         s.apps[2] = r"C:\Program Files\Resolume Arena\Arena.exe".into();
         s.tray = false;
         s.autostart = Some(false);
-        s.pad_balance = 70;
         assert_eq!(from_text(&to_text(&s)), s);
     }
 
     #[test]
     fn junk_falls_back_to_defaults() {
-        let s = from_text("show=b99 1 2 3 4\nside=?\nnonsense\n");
-        assert_eq!(s.show, Saved::default().show);
+        let s = from_text("kb=b99 1 2 3 4\nside=?\nnonsense\nfollow=false\n");
+        assert_eq!(s.kb, Saved::default().kb);
+        assert_eq!(s.paint_mode, PaintMode::Steady);
         assert_eq!(s.setup.side, SideModule::Macropad);
     }
 }

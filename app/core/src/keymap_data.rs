@@ -437,6 +437,108 @@ pub const NAMED: &[Named] = &[
         short: "/",
     },
     Named {
+        group: "Numpad",
+        code: 0x0053,
+        label: "Num Lock",
+        short: "Num",
+    },
+    Named {
+        group: "Numpad",
+        code: 0x0062,
+        label: "Numpad 0",
+        short: "0",
+    },
+    Named {
+        group: "Numpad",
+        code: 0x0059,
+        label: "Numpad 1",
+        short: "1",
+    },
+    Named {
+        group: "Numpad",
+        code: 0x005A,
+        label: "Numpad 2",
+        short: "2",
+    },
+    Named {
+        group: "Numpad",
+        code: 0x005B,
+        label: "Numpad 3",
+        short: "3",
+    },
+    Named {
+        group: "Numpad",
+        code: 0x005C,
+        label: "Numpad 4",
+        short: "4",
+    },
+    Named {
+        group: "Numpad",
+        code: 0x005D,
+        label: "Numpad 5",
+        short: "5",
+    },
+    Named {
+        group: "Numpad",
+        code: 0x005E,
+        label: "Numpad 6",
+        short: "6",
+    },
+    Named {
+        group: "Numpad",
+        code: 0x005F,
+        label: "Numpad 7",
+        short: "7",
+    },
+    Named {
+        group: "Numpad",
+        code: 0x0060,
+        label: "Numpad 8",
+        short: "8",
+    },
+    Named {
+        group: "Numpad",
+        code: 0x0061,
+        label: "Numpad 9",
+        short: "9",
+    },
+    Named {
+        group: "Numpad",
+        code: 0x0054,
+        label: "Numpad /",
+        short: "/",
+    },
+    Named {
+        group: "Numpad",
+        code: 0x0055,
+        label: "Numpad *",
+        short: "*",
+    },
+    Named {
+        group: "Numpad",
+        code: 0x0056,
+        label: "Numpad -",
+        short: "-",
+    },
+    Named {
+        group: "Numpad",
+        code: 0x0057,
+        label: "Numpad +",
+        short: "+",
+    },
+    Named {
+        group: "Numpad",
+        code: 0x0063,
+        label: "Numpad .",
+        short: ".",
+    },
+    Named {
+        group: "Numpad",
+        code: 0x0058,
+        label: "Numpad Enter",
+        short: "Enter",
+    },
+    Named {
         group: "Editing",
         code: 0x0028,
         label: "Enter",
@@ -959,7 +1061,7 @@ pub const MACROPAD_MATRIX: [(u8, u8); 24] = [
     (2, 0),
 ];
 pub const MACROPAD_MATRIX_SIZE: (u8, u8) = (4, 8);
-/// Macropad default keymap, layers A (MIDI) and B (F-keys).
+/// Macropad default keymap, layers A (MIDI) and B (numpad).
 pub const MACROPAD_DEFAULT: [[u16; 24]; 2] = [
     [
         0x7103, 0x7104, 0x7105, 0x7106, 0x7107, 0x7108, 0x7109, 0x710A, 0x710B, 0x710C, 0x710D,
@@ -967,8 +1069,8 @@ pub const MACROPAD_DEFAULT: [[u16; 24]; 2] = [
         0x7119, 0x711A,
     ],
     [
-        0x0068, 0x0069, 0x006A, 0x006B, 0x006C, 0x006D, 0x006E, 0x006F, 0x0070, 0x0071, 0x0072,
-        0x0073, 0x0168, 0x0169, 0x016A, 0x016B, 0x016C, 0x016D, 0x016E, 0x016F, 0x0268, 0x0269,
-        0x026A, 0x026B,
+        0x0029, 0x00B2, 0x002E, 0x002A, 0x0053, 0x0054, 0x0055, 0x0056, 0x005F, 0x0060, 0x0061,
+        0x0057, 0x005C, 0x005D, 0x005E, 0x0057, 0x0059, 0x005A, 0x005B, 0x0058, 0x0062, 0x0062,
+        0x0063, 0x0058,
     ],
 ];

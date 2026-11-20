@@ -30,7 +30,7 @@ pub enum Command {
     },
     /// Hotkey lock on every connected device.
     SetHotkeyLock(bool),
-    /// Macropad layer: 0 = MIDI, 1 = F-keys.
+    /// Macropad layer: 0 = MIDI, 1 = numpad.
     SetLayer(u8),
     /// Some = PC renders this effect on both devices, None = back to built-in effects.
     SetLinked(Option<EffectParams>),
@@ -47,7 +47,13 @@ pub enum Command {
     SetPaint {
         kind: DeviceKind,
         leds: Vec<proto::Paint>,
-        follow: bool,
+        mode: proto::PaintMode,
+        save: bool,
+    },
+    /// LED current and color gains. `save` = keep after a restart.
+    SetLedCal {
+        kind: DeviceKind,
+        cal: proto::LedCal,
         save: bool,
     },
     /// Change keys in a device's keymap (saved on the device right away).
@@ -72,6 +78,9 @@ pub struct DeviceStatus {
     pub keymap: Option<Keymap>,
     /// Macropad corner combos; None on the keyboard and on older macropad firmware.
     pub combos: Option<proto::Combos>,
+    /// LED calibration; None on older firmware.
+    pub led_cal: Option<proto::LedCal>,
+    pub serial: Option<String>,
 }
 
 #[derive(Clone, Default)]
@@ -93,6 +102,8 @@ pub struct Status {
     pub layout_size: (f32, f32),
     pub fps: f32,
     pub message: Option<String>,
+    /// A Framework numpad is plugged in.
+    pub numpad: bool,
 }
 
 impl Status {
@@ -116,6 +127,7 @@ struct Open {
     leds: Vec<LedPoint>,
     keymap: Option<Keymap>,
     combos: Option<proto::Combos>,
+    led_cal: Option<proto::LedCal>,
 }
 
 pub struct EngineHandle {
@@ -357,16 +369,12 @@ impl Engine {
             Command::SetPaint {
                 kind,
                 leds,
-                follow,
+                mode,
                 save,
             } => {
                 if let Some(o) = self.open.get(&key(kind)) {
                     let mut msgs = proto::encode_paint(&leds);
-                    msgs.push(proto::paint_ctrl(if follow {
-                        proto::PaintOp::FollowOn
-                    } else {
-                        proto::PaintOp::FollowOff
-                    }));
+                    msgs.push(proto::paint_ctrl(mode.op()));
                     if save {
                         msgs.push(proto::paint_ctrl(proto::PaintOp::Save));
                     }
@@ -388,6 +396,14 @@ impl Engine {
                             }
                             self.refresh();
                         }
+                        Err(e) => self.fail(kind, e),
+                    }
+                }
+            }
+            Command::SetLedCal { kind, cal, save } => {
+                if let Some(o) = self.open.get_mut(&key(kind)) {
+                    match o.dev.transact(&proto::set_led_cal(&cal, save)) {
+                        Ok(_) => o.led_cal = Some(cal),
                         Err(e) => self.fail(kind, e),
                     }
                 }
@@ -450,7 +466,9 @@ impl Engine {
         let found = if self.demo {
             demo_devices(&skip)
         } else if let Some(api) = self.api.as_mut() {
-            device::scan(api, &skip)
+            let found = device::scan(api, &skip);
+            self.status.lock().unwrap().numpad = device::numpad_present(api);
+            found
         } else {
             return;
         };
@@ -464,6 +482,7 @@ impl Engine {
                         let _ = dev.transact(&proto::set_host_mode(true));
                     }
                     let keymap = dev.keymap().ok();
+                    let led_cal = dev.led_cal().ok().flatten();
                     let combos = if kind == DeviceKind::Macropad {
                         dev.combos().ok().flatten()
                     } else {
@@ -477,6 +496,7 @@ impl Engine {
                             leds,
                             keymap,
                             combos,
+                            led_cal,
                         },
                     );
                     added = true;
@@ -529,6 +549,8 @@ impl Engine {
                             leds: o.leds.clone(),
                             keymap: o.keymap.clone(),
                             combos: o.combos,
+                            led_cal: o.led_cal,
+                            serial: o.dev.serial.clone(),
                         }),
                     ));
                 }

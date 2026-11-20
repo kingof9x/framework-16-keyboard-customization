@@ -4,7 +4,7 @@
 // Framework Laptop 16 RGB macropad - "f16custom" keymap for VJ use (Resolume).
 //
 // Layer A (MIDI):   24 MIDI notes, MIDI note 48 (top left) to 71 (bottom right)
-// Layer B (F-keys): F13-F24, Ctrl+F13-F20, Shift+F13-F16
+// Layer B (numpad): Framework's numpad layout
 //
 // Press the two TOP corner keys together  -> switch between layer A and B
 //                                            (remembered after unplugging)
@@ -18,7 +18,6 @@
 #include QMK_KEYBOARD_H
 #include "framework.h"
 #include "f16custom.h"
-#include "is31flcommon.h"
 
 // _FACTORY (= 2, used by Framework's factory test tool) comes from macropad.h
 enum pad_layers {
@@ -33,8 +32,6 @@ enum pad_keycodes {
     PAD_LIGHT,              // toggle the lighting overlay
 };
 
-#define C_F(k) LCTL(k)
-#define S_F(k) LSFT(k)
 
 // clang-format off
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
@@ -62,28 +59,29 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         MI_E1,  MI_F1,  MI_Fs1, MI_G1,
         MI_Gs1, MI_A1,  MI_As1, MI_B1
     ),
-    /* Layer B - function keys
+    /* Layer B - Framework's numpad layout (change any key in the app's Key mapping page)
+     * The numpad's big keys (+, Enter, 0) take two of the macropad's squares.
      * ┌──────┬──────┬──────┬──────┐
-     * │ F13  │ F14  │ F15  │ F16  │
+     * │ Esc  │ Calc │  =   │ Bksp │
      * ├──────┼──────┼──────┼──────┤
-     * │ F17  │ F18  │ F19  │ F20  │
+     * │ Num  │  /   │  *   │  -   │
      * ├──────┼──────┼──────┼──────┤
-     * │ F21  │ F22  │ F23  │ F24  │
+     * │  7   │  8   │  9   │  +   │
      * ├──────┼──────┼──────┼──────┤
-     * │C-F13 │C-F14 │C-F15 │C-F16 │
+     * │  4   │  5   │  6   │  +   │
      * ├──────┼──────┼──────┼──────┤
-     * │C-F17 │C-F18 │C-F19 │C-F20 │
+     * │  1   │  2   │  3   │Enter │
      * ├──────┼──────┼──────┼──────┤
-     * │S-F13 │S-F14 │S-F15 │S-F16 │
+     * │  0   │  0   │  .   │Enter │
      * └──────┴──────┴──────┴──────┘
      */
     [_FKEYS] = LAYOUT(
-        KC_F13,      KC_F14,      KC_F15,      KC_F16,
-        KC_F17,      KC_F18,      KC_F19,      KC_F20,
-        KC_F21,      KC_F22,      KC_F23,      KC_F24,
-        C_F(KC_F13), C_F(KC_F14), C_F(KC_F15), C_F(KC_F16),
-        C_F(KC_F17), C_F(KC_F18), C_F(KC_F19), C_F(KC_F20),
-        S_F(KC_F13), S_F(KC_F14), S_F(KC_F15), S_F(KC_F16)
+        KC_ESC,  KC_CALC, KC_EQL,  KC_BSPC,
+        KC_NUM,  KC_PSLS, KC_PAST, KC_PMNS,
+        KC_P7,   KC_P8,   KC_P9,   KC_PPLS,
+        KC_P4,   KC_P5,   KC_P6,   KC_PPLS,
+        KC_P1,   KC_P2,   KC_P3,   KC_PENT,
+        KC_P0,   KC_P0,   KC_PDOT, KC_PENT
     ),
     // Framework factory test layer (only switched on by their test tool)
     [_FACTORY] = LAYOUT(
@@ -266,24 +264,7 @@ static void set_key_hsv(uint8_t row, uint8_t col, uint8_t h, uint8_t s, uint8_t 
 #define HUE_LAYER_A 128 // cyan
 #define HUE_LAYER_B 21  // orange
 
-// Framework drives the macropad LEDs harder than the keyboard's (global current
-// 185 vs 104), so at the same brightness the macropad looked much brighter. Its
-// config.h is read after ours, so set the keyboard's current on the LED chip
-// directly, and again now and then in case the chip was set up again (sleep).
-#define MATCHED_GLOBALCURRENT 104
-static uint32_t current_timer  = 0;
-static bool     current_set    = false;
-
-static void match_keyboard_brightness(void) {
-    if (current_set && timer_elapsed32(current_timer) < 5000) return;
-    IS31FL_unlock_register(DRIVER_ADDR_1, ISSI_PAGE_FUNCTION);
-    IS31FL_write_single_register(DRIVER_ADDR_1, ISSI_REG_GLOBALCURRENT, MATCHED_GLOBALCURRENT);
-    current_set   = true;
-    current_timer = timer_read32();
-}
-
 bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
-    if (led_min == 0) match_keyboard_brightness();
     uint8_t val = rgb_matrix_get_val();
     if (val < 64) val = 64; // keep the indicator visible on low brightness
     uint8_t hue = hostfx_get_layer() == 0 ? HUE_LAYER_A : HUE_LAYER_B;
