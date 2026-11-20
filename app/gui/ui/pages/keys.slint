@@ -4,7 +4,7 @@ import { Button, ComboBox, LineEdit } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { App } from "../state.slint";
 import { Card, Group, Hint, Body, RadioButton, CheckBox, Status, Switch } from "../widgets.slint";
-import { Deck, OnOff } from "../parts.slint";
+import { OnOff } from "../parts.slint";
 
 // A program path with a Browse button.
 component AppPath inherits HorizontalLayout {
@@ -43,7 +43,6 @@ component ComboRow inherits HorizontalLayout {
 
 export component KeysPage inherits VerticalLayout {
     spacing: 12px;
-    Deck { }
     HorizontalLayout {
         spacing: 8px;
         Status { text: "Click a key to change it. Changes are saved on the device right away, and work on any computer."; vertical-alignment: center; horizontal-stretch: 1; wrap: word-wrap; }

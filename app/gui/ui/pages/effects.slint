@@ -3,7 +3,7 @@ import { Button, ComboBox } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { App } from "../state.slint";
 import { Card, Group, Hint, Body, Status, AccentButton, Slider } from "../widgets.slint";
-import { Deck, ColorPicker, SliderRow, OnOff } from "../parts.slint";
+import { ColorPicker, SliderRow, OnOff } from "../parts.slint";
 
 // Effect, color, speed and brightness for one device (or both, joined).
 component DeviceControls inherits VerticalLayout {
@@ -43,7 +43,6 @@ component DeviceControls inherits VerticalLayout {
 
 export component EffectsPage inherits VerticalLayout {
     spacing: 12px;
-    Deck { }
     HorizontalLayout {
         spacing: 8px;
         Status { text: App.deck-caption; vertical-alignment: center; horizontal-stretch: 1; }
