@@ -124,17 +124,25 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 // config.h), so they follow the corner keys' positions on every layer.
 const uint16_t PROGMEM swap_combo[]  = {KC_A, KC_D, COMBO_END}; // top corners
 const uint16_t PROGMEM light_combo[] = {KC_U, KC_X, COMBO_END}; // bottom corners
+const uint16_t PROGMEM four_combo[]  = {KC_A, KC_B, KC_C, KC_D, COMBO_END}; // whole top row
 
-enum combo_ids { COMBO_TOP, COMBO_BOTTOM };
+enum combo_ids { COMBO_TOP, COMBO_BOTTOM, COMBO_TOP_ROW };
 
 combo_t key_combos[] = {
-    [COMBO_TOP]    = COMBO(swap_combo, PAD_SWAP),
-    [COMBO_BOTTOM] = COMBO(light_combo, PAD_LIGHT),
+    [COMBO_TOP]     = COMBO(swap_combo, PAD_SWAP),
+    [COMBO_BOTTOM]  = COMBO(light_combo, PAD_LIGHT),
+    [COMBO_TOP_ROW] = COMBO(four_combo, PAD_SWAP), // the top combo, as all four top keys (app setting)
 };
+
+// Four keys take a little longer to land together than two
+uint16_t get_combo_term(uint16_t index, combo_t *combo) {
+    return index == COMBO_TOP_ROW ? 90 : COMBO_TERM;
+}
 
 // ---------------------------------------------------------------------------
 // Combo settings from the app (HOSTFX_COMBOS), kept in the paint store's spare bytes
-//   extra slot 0: [flags: bit 0 top off, bit 1 bottom off, bit 2 corner layer lights on]
+//   extra slot 0: [flags: bit 0 top off, bit 1 bottom off, bit 2 corner layer lights on,
+//                  bit 3 top combo is all four top keys instead of the two corners]
 //   extra slot 1: top action (u16 big endian), 0 = switch layers
 //   extra slot 2: bottom action, 0 = lighting controls
 // ---------------------------------------------------------------------------
@@ -164,12 +172,13 @@ bool hostfx_combos_get(uint8_t *d) {
     d[4] = combo_action[1] >> 8;
     d[5] = combo_action[1] & 0xFF;
     d[6] = (combo_flags & 4) != 0;
+    d[7] = (combo_flags & 8) != 0;
     return true;
 }
 
 bool hostfx_combos_set(const uint8_t *d) {
     combos_load();
-    combo_flags     = (d[0] ? 0 : 1) | (d[1] ? 0 : 2) | (d[6] ? 4 : 0);
+    combo_flags     = (d[0] ? 0 : 1) | (d[1] ? 0 : 2) | (d[6] ? 4 : 0) | (d[7] ? 8 : 0);
     combo_action[0] = ((uint16_t)d[2] << 8) | d[3];
     combo_action[1] = ((uint16_t)d[4] << 8) | d[5];
     uint8_t v[3]    = {combo_flags, 0, 0};
@@ -184,7 +193,15 @@ bool hostfx_combos_set(const uint8_t *d) {
 
 bool combo_should_trigger(uint16_t combo_index, combo_t *combo, uint16_t keycode, keyrecord_t *record) {
     combos_load();
-    return !(combo_flags & (1 << combo_index));
+    bool top_row = combo_flags & 8;
+    switch (combo_index) {
+        case COMBO_TOP:
+            return !(combo_flags & 1) && !top_row;
+        case COMBO_TOP_ROW:
+            return !(combo_flags & 1) && top_row;
+        default:
+            return !(combo_flags & 2);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -223,8 +240,8 @@ bool process_record_keymap(uint16_t keycode, keyrecord_t *record) {
         case PAD_SWAP:
             if (record->event.pressed) {
                 combos_load();
-                if (combo_action[COMBO_TOP]) {
-                    tap_code16(combo_action[COMBO_TOP]);
+                if (combo_action[0]) {
+                    tap_code16(combo_action[0]);
                 } else {
                     hostfx_set_layer(hostfx_get_layer() == 0 ? 1 : 0);
                 }
@@ -233,8 +250,8 @@ bool process_record_keymap(uint16_t keycode, keyrecord_t *record) {
         case PAD_LIGHT:
             if (record->event.pressed) {
                 combos_load();
-                if (combo_action[COMBO_BOTTOM]) {
-                    tap_code16(combo_action[COMBO_BOTTOM]);
+                if (combo_action[1]) {
+                    tap_code16(combo_action[1]);
                 } else {
                     layer_invert(_LIGHT);
                 }

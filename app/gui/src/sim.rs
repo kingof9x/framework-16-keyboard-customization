@@ -38,7 +38,8 @@ struct SimState {
     led_cal: [u8; 4],
     /// VIA keymap buffer: layers of rows x columns, 2 bytes each (big endian).
     keymap: Vec<u8>,
-    combos: [u8; 7],
+    combos: [u8; 8],
+    shortcuts: bool,
 }
 
 pub struct SimPort(RefCell<SimState>);
@@ -78,7 +79,8 @@ impl SimPort {
             } else {
                 Board::Keyboard
             }),
-            combos: [1, 1, 0, 0, 0, 0, 0],
+            combos: [1, 1, 0, 0, 0, 0, 0, 0],
+            shortcuts: true,
         }))
     }
 }
@@ -166,6 +168,7 @@ impl SimState {
         const PAINT_CTRL: u8 = ValueId::PaintCtrl as u8;
         const COMBOS: u8 = ValueId::Combos as u8;
         const LED_CAL: u8 = ValueId::LedCal as u8;
+        const SHORTCUTS: u8 = ValueId::Shortcuts as u8;
         if self.host && self.last_frame.elapsed() > Duration::from_secs(3) {
             self.host = false; // same fallback as the firmware
         }
@@ -316,6 +319,14 @@ impl SimState {
                 }
                 _ => false,
             },
+            (true, SHORTCUTS) if !self.macropad => {
+                d[0] = self.shortcuts as u8;
+                true
+            }
+            (false, SHORTCUTS) if !self.macropad => {
+                self.shortcuts = d[0] != 0;
+                true
+            }
             (true, LED_CAL) => {
                 d[..4].copy_from_slice(&self.led_cal);
                 d[4] = 104;
@@ -326,11 +337,11 @@ impl SimState {
                 true
             }
             (true, COMBOS) if self.macropad => {
-                d[..7].copy_from_slice(&self.combos);
+                d[..8].copy_from_slice(&self.combos);
                 true
             }
             (false, COMBOS) if self.macropad => {
-                self.combos.copy_from_slice(&d[..7]);
+                self.combos.copy_from_slice(&d[..8]);
                 true
             }
             _ => false,

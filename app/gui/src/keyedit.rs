@@ -447,6 +447,10 @@ pub fn push(app: &AppWindow, st: &mut State) {
             .map_or(-1, |i| i as i32)
     };
     g.set_corner_lights(c.corner_lights);
+    g.set_combo_top_row(c.top_row);
+    let sc = ready(st, DeviceKind::Keyboard).and_then(|d| d.shortcuts);
+    g.set_shortcuts_known(sc.is_some());
+    g.set_shortcuts_on(sc.unwrap_or(false));
     g.set_combo_top_on(c.top_on);
     g.set_combo_bottom_on(c.bottom_on);
     g.set_combo_top_choice(index(c.top_action));
@@ -561,6 +565,20 @@ pub fn corner_lights_toggled(st: &mut State, on: bool) {
     if let Some(mut c) = st.combos() {
         c.corner_lights = on;
         st.set_combos(c);
+    }
+}
+
+pub fn combo_top_row_chosen(st: &mut State, on: bool) {
+    if let Some(mut c) = st.combos() {
+        c.top_row = on;
+        st.set_combos(c);
+    }
+}
+
+pub fn shortcuts_toggled(st: &mut State, on: bool) {
+    st.engine.send(Command::SetShortcuts(on));
+    if let Slot::Ready(d) = st.status.slot_mut(DeviceKind::Keyboard) {
+        d.shortcuts = Some(on);
     }
 }
 

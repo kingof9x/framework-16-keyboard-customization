@@ -37,11 +37,12 @@ enum hostfx_value_id {
     HOSTFX_PAINT       = 0x0B, // get: [start] -> [count, (hue, sat, on) * count] (max 9)
                                // set: [start, count, (hue, sat, on) * count] (max 8)
     HOSTFX_PAINT_CTRL  = 0x0C, // get: [follow, painted count]; set: [op] see hostfx_paint_op
-    HOSTFX_COMBOS      = 0x0D, // get/set: [top on, bottom on, top action (u16 BE), bottom action (u16 BE), corner layer lights] (saved)
+    HOSTFX_COMBOS      = 0x0D, // get/set: [top on, bottom on, top action (u16 BE), bottom action (u16 BE), corner layer lights, top combo is the whole top row] (saved)
                                // macropad corner combos; action 0 = built-in job. Keyboard: unhandled
     HOSTFX_LED_CAL     = 0x0E, // get: [current, red, green, blue, default current]
                                // set: [current, red, green, blue, save]: LED driver current (0 = default)
                                // and per-color gains (255 = full), to match the two devices' brightness
+    HOSTFX_SHORTCUTS   = 0x0F, // get/set: [F12 shortcuts on] (saved). Keyboard only; macropad: unhandled
 };
 
 enum hostfx_paint_op {

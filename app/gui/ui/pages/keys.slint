@@ -60,7 +60,7 @@ export component KeysPage inherits VerticalLayout {
     if App.side == 1: Card {
         icon: @image-url("../icons/grid.svg");
         title: "Macropad shows";
-        help: "The macropad's two layers. The top corner combo switches between them.";
+        help: "The macropad's two layers. The top combo switches between them.";
         HorizontalLayout {
             spacing: 16px;
             RadioButton { text: "A: MIDI notes"; checked: App.keys-pad-view == 0; clicked => { App.keys-view-chosen(1, 0); } }
@@ -104,6 +104,12 @@ export component KeysPage inherits VerticalLayout {
     }
     if !App.key-selected: Hint { text: "No key picked yet."; }
     Card {
+        icon: @image-url("../icons/keyboard.svg");
+        title: "F12 shortcuts";
+        help: App.shortcuts-known ? "Hold F12 and press → or ← for the next or previous effect, ↓ for your saved effect, ↑ for audio reactivity. F12 on its own still works (when you let go)." : "Needs the latest keyboard firmware (see the Firmware page).";
+        OnOff { checked: App.shortcuts-on; enabled: App.shortcuts-known; toggled(v) => { App.shortcuts-toggled(v); } }
+    }
+    Card {
         icon: @image-url("../icons/target_arrow.svg");
         title: "Fn lighting keys";
         help: "Fn + W, E, R, T, Y, U and D, F, G, H, J change the lights, and so do the macropad's lighting controls. Turn them off so the lights can't change by accident.";
@@ -111,9 +117,16 @@ export component KeysPage inherits VerticalLayout {
     }
     if App.side == 1: Group {
         title: "Macropad corner combos";
-        help: "Press two corner keys at the same time. Each combo can be turned off or given another job.";
+        help: "Press the keys at the same time. Each combo can be turned off or given another job.";
+        HorizontalLayout {
+            spacing: 16px;
+            alignment: start;
+            Body { text: "Top combo:"; vertical-alignment: center; color: Theme.text2; }
+            RadioButton { text: "Two top corners"; enabled: App.combos-known; checked: !App.combo-top-row; clicked => { App.combo-top-row-chosen(false); } }
+            RadioButton { text: "All four top keys"; enabled: App.combos-known; checked: App.combo-top-row; clicked => { App.combo-top-row-chosen(true); } }
+        }
         ComboRow {
-            label: "Top corners";
+            label: App.combo-top-row ? "Top row" : "Top corners";
             enabled: App.combos-known;
             on: App.combo-top-on;
             choices: App.combo-top-choices;

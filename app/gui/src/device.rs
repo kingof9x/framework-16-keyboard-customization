@@ -155,6 +155,15 @@ impl Device {
         }
     }
 
+    /// Whether the keyboard's F12 shortcuts are on; None if the firmware has none.
+    pub fn shortcuts(&self) -> Result<Option<bool>> {
+        match self.transact(&proto::shortcuts_request()) {
+            Ok(p) => Ok(Some(p[0] != 0)),
+            Err(DeviceError::Protocol(ProtocolError::Unsupported)) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
     /// LED calibration; None on firmware without it.
     pub fn led_cal(&self) -> Result<Option<proto::LedCal>> {
         match self.transact(&proto::led_cal_request()) {
@@ -297,6 +306,7 @@ mod tests {
             top_action: 0,
             bottom_action: app_code(3),
             corner_lights: true,
+            top_row: true,
         };
         pad.transact(&proto::set_combos(&c)).unwrap();
         assert_eq!(pad.combos().unwrap(), Some(c));

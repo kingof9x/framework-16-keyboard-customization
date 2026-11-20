@@ -26,12 +26,16 @@ the Windows app.
   keys do nothing, so a stray key press can't change the lights during a show.
 * VIA and Framework's `qmk_hid` tool still work.
 
-**Keyboard:** same keys and Fn layer as Framework's official firmware.
+**Keyboard:** same keys and Fn layer as Framework's official firmware, plus
+**F12 shortcuts**: hold F12 and press → / ← for the next or previous effect,
+↓ to go back to your saved effect, ↑ to turn audio reactivity on or off. They
+can be turned off in the app.
 
 **Macropad** (details in [`resolume/MAPPING.md`](resolume/MAPPING.md))
 * **Layer A:** 24 MIDI notes (notes 48–71). The pad shows up as a USB MIDI device.
 * **Layer B:** Framework's numpad layout. Change any key in the app.
-* Press the **two top corner keys together** to switch layers. The whole pad
+* Press the **two top corner keys together** to switch layers (or, if you
+  pick it in the app, **all four top keys**). The whole pad
   flashes cyan (A) or orange (B). The app can make the top corners keep that
   color.
 * Press the **two bottom corner keys together** for the lighting controls
@@ -55,8 +59,8 @@ the Windows app.
   **match the brightness** of the keyboard and macropad.
 * **Audio:** light shows that follow the music the PC plays (spectrum bars,
   centre out, level meter, beat pulse, bass ripples, color wash, strobe),
-  across the keyboard and side module as one surface. **Ctrl+Alt+Shift+M**
-  turns it on and off, the same shortcut as White Rabbit's (switch it off in
+  across the keyboard and side module as one surface. **F12 + ↑** (or
+  Ctrl+Alt+Shift+M, White Rabbit's shortcut) turns it on and off (switch it off in
   the Audio page if you like). The sound is measured with White Rabbit's own
   audio code.
 * **Key mapping:** change what any keyboard or macropad key does (with or without
@@ -167,7 +171,7 @@ is expected.
      **tint**. **Match the brightness of the two devices** has LED power and
      red/green/blue sliders per device, and can show plain white on both
      while you adjust.
-   * **Audio:** turn on **Audio reactivity** (or press **Ctrl+Alt+Shift+M**),
+   * **Audio:** turn on **Audio reactivity** (or hold **F12** and press **↑**),
      pick a show and set the sensitivity. It listens to whatever the PC is
      playing. Turning it off puts back what the Lighting page shows.
    * **Key mapping:** click a key in the picture, then pick **Framework default**,

@@ -1,7 +1,8 @@
 # Macropad → Resolume mapping sheet
 
 The macropad has two layers. Switch between them by pressing the **two top
-corner keys at the same time**. The top corner keys glow **cyan on layer A**
+corner keys at the same time** (or all four top keys, if you pick that on the
+app's Key mapping page). The top corner keys glow **cyan on layer A**
 and **orange on layer B**, and the whole pad flashes that color when you
 switch. The layer is remembered after unplugging. You can also switch it in
 the app.

@@ -38,7 +38,8 @@ firmware).
 | `0B` | PAINT | request `start`; answer `start count (hue sat on)×count` (max 9) | `start count (hue sat on)×count` (max 8) |
 | `0C` | PAINT_CTRL | `follow count` | `op`: 0 clear, 1 save to EEPROM, 2 steady, 3 follow brightness, 4 forget unsaved changes, 5 tint. `follow` answers 0 steady, 1 follow, 2 tint |
 | `0E` | LED_CAL | `current red green blue default_current` | `current red green blue save`: LED driver current and per-color gains (255 = full) |
-| `0D` | COMBOS | `top_on bottom_on top_action(u16 BE) bottom_action(u16 BE) corner_lights` | same (saved). Macropad only; the keyboard answers `FF` |
+| `0F` | SHORTCUTS | `on` | `on`: the keyboard's F12 + arrow shortcuts (saved). Keyboard only |
+| `0D` | COMBOS | `top_on bottom_on top_action(u16 BE) bottom_action(u16 BE) corner_lights top_row` | same (saved). Macropad only; the keyboard answers `FF` |
 
 Notes:
 
@@ -61,7 +62,14 @@ Notes:
   working after the corner keys are changed. An action of 0 is the built-in job
   (top: switch layer A/B, bottom: lighting overlay); any other value is a key
   code that is tapped. `corner_lights` makes the top corners keep the layer
-  color (cyan A, orange B). These live in spare bytes at the end of the paint
+  color (cyan A, orange B). `top_row` makes the top combo all four top keys
+  instead of the two corners (with a 90 ms window instead of 40 ms).
+* **F12 shortcuts** (keyboard): hold F12 and press → / ← for the next or
+  previous effect (not saved), ↓ to go back to the saved effect, ↑ to tap
+  Ctrl+Alt+Shift+M (audio mode in the app and White Rabbit). F12 is matched by
+  matrix position; its own key code is sent when it is let go without an arrow.
+  The lighting shortcuts follow the hotkey lock and do nothing while the PC is
+  streaming frames. These live in spare bytes at the end of the paint
   store, which the macropad's 24 LEDs leave unused.
 * **Keys:** the app changes keys with VIA's own dynamic keymap commands
   (`0x04` get keycode, `0x05` set keycode, `0x12` read the keymap buffer), so

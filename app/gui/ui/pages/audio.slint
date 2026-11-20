@@ -33,8 +33,8 @@ export component AudioPage inherits VerticalLayout {
     }
     Card {
         icon: @image-url("../icons/keyboard.svg");
-        title: "Keyboard shortcut: Ctrl+Alt+Shift+M";
-        help: "Turns audio reactivity on or off from anywhere, the same shortcut as White Rabbit's (with both apps running, it switches both).";
+        title: "Keyboard shortcut: F12 + ↑";
+        help: "Hold F12 and press ↑ to turn audio reactivity on or off from anywhere. It sends Ctrl+Alt+Shift+M (White Rabbit's shortcut, which also works), so with both apps running it switches both.";
         OnOff { checked: App.audio-hotkey; toggled(v) => { App.audio-hotkey-toggled(v); } }
     }
     Hint { text: "Audio reactivity takes over the lights while it runs. Turning it off puts back what the Lighting page shows."; }

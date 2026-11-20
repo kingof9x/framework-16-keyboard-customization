@@ -15,6 +15,13 @@ bool    hostfx_set_layer(uint8_t layer);  // false = not supported
 bool hostfx_combos_get(uint8_t *d);
 bool hostfx_combos_set(const uint8_t *d);
 
+// Keymap hook run before anything else; return false to swallow the key.
+bool pre_process_record_keymap(uint16_t keycode, keyrecord_t *record);
+// The keyboard's F12 shortcuts (F12 + arrows). Weak default: not supported.
+bool hostfx_has_shortcuts(void);
+bool hostfx_shortcuts_get(void);
+void hostfx_shortcuts_set(bool on);
+
 // Hotkey lock: when on, all lighting keycodes (RGB_* and BL_*) do nothing.
 bool hostfx_hotkey_lock_get(void);
 void hostfx_hotkey_lock_set(bool on);
@@ -23,6 +30,7 @@ void hostfx_hotkey_lock_set(bool on);
 extern uint8_t hostfx_frame[RGB_MATRIX_LED_COUNT][3];
 bool hostfx_host_mode_active(void);
 void hostfx_host_mode_set(bool on);
+bool hostfx_frames_fresh(void); // the PC is streaming frames right now
 
 // surface.c: joined surface, effect clock, painted keys
 void surface_apply_span(bool on, uint8_t x0, uint8_t x1);
