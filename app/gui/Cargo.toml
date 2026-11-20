@@ -21,6 +21,8 @@ slint = { version = "1.18", default-features = false, features = [
     "software-renderer-systemfonts",
     "raw-window-handle-06",
 ] }
+# Audio mode: White Rabbit's sound capture and analysis, so both apps hear the same thing
+wr-music = { git = "https://github.com/kingof9x/white-rabbit-framework-matrix", rev = "fc98900568e854d0de6f12ceb772742ff6121c33" }
 # Draws the keyboard picture
 tiny-skia = { version = "0.11", default-features = false, features = ["std", "simd"] }
 

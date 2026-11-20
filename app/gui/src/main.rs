@@ -5,6 +5,7 @@
 
 slint::include_modules!();
 
+mod audio_src;
 mod deck;
 mod device;
 mod engine;
@@ -70,6 +71,11 @@ pub struct State {
     cal_dirty: [Option<Instant>; 2],
     /// Plain white on both devices while matching their brightness.
     white_test: bool,
+    /// How long the last picture took to draw, and when it was drawn.
+    draw_cost: Duration,
+    last_draw: Instant,
+    /// Audio mode is on (asked for; the engine says whether it really draws).
+    audio_on: bool,
     /// What the app found plugged in last time (to follow module swaps).
     last_detected: Option<SideModule>,
     windows: theme::Windows,
@@ -318,9 +324,62 @@ impl State {
         };
     }
 
+    fn audio_settings(&self) -> engine::AudioSettings {
+        engine::AudioSettings {
+            look: self.s.audio_look,
+            sensitivity: self.s.audio_sensitivity,
+        }
+    }
+
+    /// Audio mode on or off. Off puts back what the Lighting page shows.
+    fn set_audio(&mut self, on: bool) {
+        self.audio_on = on;
+        self.engine
+            .send(Command::SetAudio(on.then(|| self.audio_settings())));
+        if !on {
+            self.send_current(false);
+        }
+    }
+
+    /// Per-key colors of audio mode's last frame, for the picture.
+    fn audio_key_colors(&self, placed: &[PlacedKey]) -> Option<Vec<f16_core::effects::Rgb>> {
+        if !self.status.audio {
+            return None;
+        }
+        let mut out = vec![[0u8; 3]; placed.len()];
+        for (n, (kind, dev)) in [
+            (DeviceKind::Keyboard, Dev::Keyboard),
+            (DeviceKind::Macropad, Dev::Module),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let Some(d) = ready(&self.status, kind) else {
+                continue;
+            };
+            let colors = &self.status.audio_colors[n];
+            let (defs, size) = match dev {
+                Dev::Keyboard => (keys::keyboard_keys(), KEYBOARD_SIZE),
+                Dev::Module => (keys::macropad_keys(self.layer()), MODULE_GRID),
+            };
+            for (led, key) in keys::map_leds_to_keys(&d.leds, &defs, size)
+                .into_iter()
+                .enumerate()
+            {
+                if let (Some(c), Some(i)) = (
+                    colors.get(led),
+                    placed.iter().position(|p| p.dev == dev && p.index == key),
+                ) {
+                    out[i] = *c;
+                }
+            }
+        }
+        Some(out)
+    }
+
     /// Sends what the Lighting page shows (live, or saved with `save`).
     fn send_current(&mut self, save: bool) {
-        if self.white_test {
+        if self.white_test || self.audio_on {
             return;
         }
         let join = self.joined();
@@ -425,6 +484,9 @@ fn push_all(app: &AppWindow, st: &State) {
     } else {
         1
     });
+    g.set_audio_look(s.audio_look.key().into());
+    g.set_audio_sensitivity(s.audio_sensitivity as i32);
+    g.set_audio_hotkey(s.audio_hotkey);
     g.set_theme_choice(
         theme::CHOICES
             .iter()
@@ -769,6 +831,24 @@ fn tick(app: &AppWindow, st: &mut State) {
             .any(|k| ready(&status, *k).is_some_and(|d| d.info.hotkey_lock)),
     );
     g.set_layer(st.layer() as i32);
+    // Audio mode
+    if st.audio_on && !status.audio && status.audio_problem.is_some() {
+        st.audio_on = false; // it couldn't start
+    }
+    g.set_audio_on(st.audio_on);
+    g.set_audio_status(
+        if let Some(p) = &status.audio_problem {
+            p.clone()
+        } else if st.audio_on {
+            match &status.audio_device {
+                Some(d) => format!("On: listening to {d}."),
+                None => "On: waiting for sound…".into(),
+            }
+        } else {
+            "Off. The lights follow whatever the PC is playing, across the keyboard and side module.".into()
+        }
+        .into(),
+    );
     g.set_kb_present(!matches!(status.keyboard, Slot::Missing));
     g.set_mod_present(!matches!(status.macropad, Slot::Missing));
 
@@ -788,7 +868,17 @@ fn tick(app: &AppWindow, st: &mut State) {
         keyedit::push(app, st);
     }
     let visible = app.window().is_visible();
-    if visible && matches!(page.as_str(), "lighting" | "macropad" | "setup" | "keys") {
+    // Redraw the picture only as often as this PC keeps up with, so a slow machine never
+    // spends all its time drawing and stops answering clicks.
+    let due = st.last_draw.elapsed() >= st.draw_cost.mul_f32(2.0);
+    if due
+        && visible
+        && matches!(
+            page.as_str(),
+            "lighting" | "audio" | "macropad" | "setup" | "keys"
+        )
+    {
+        let started = Instant::now();
         let scale = app.window().scale_factor();
         let width = ((g.get_deck_width() * scale).round() as u32).clamp(300, 1400);
         let mut preview = std::mem::take(&mut st.preview);
@@ -797,6 +887,8 @@ fn tick(app: &AppWindow, st: &mut State) {
         let shell = deck::shell(&scene.setup);
         let colors = if page == "keys" {
             keyedit::decorate(st, &mut placed)
+        } else if let Some(c) = st.audio_key_colors(&placed) {
+            c
         } else {
             preview.colors(&scene, &placed)
         };
@@ -860,6 +952,8 @@ fn tick(app: &AppWindow, st: &mut State) {
             caption.push("pretend typing on".into());
         }
         g.set_deck_caption(caption.join("  ·  ").into());
+        st.draw_cost = started.elapsed();
+        st.last_draw = Instant::now();
     }
 
     if st.s != st.last_saved {
@@ -949,6 +1043,9 @@ fn main() -> Result<(), slint::PlatformError> {
                 winsys::TrayEvent::Quit => {
                     let _ = slint::quit_event_loop();
                 }
+                winsys::TrayEvent::AudioHotkey => {
+                    app.global::<App>().invoke_audio_shortcut();
+                }
             });
         })
     };
@@ -973,12 +1070,27 @@ fn main() -> Result<(), slint::PlatformError> {
         cal_dirty: [None, None],
         white_test: false,
         last_detected: None,
+        audio_on: false,
+        draw_cost: Duration::ZERO,
+        last_draw: Instant::now(),
         windows: theme::read_windows(),
         last_theme_check: Instant::now(),
         status: Status::default(),
         legends: Rc::new(VecModel::default()),
     }));
     effect_models(&app);
+    {
+        let looks: Vec<AudioLookItem> = f16_core::audio::AudioLook::ALL
+            .iter()
+            .map(|l| AudioLookItem {
+                key: l.key().into(),
+                name: l.name().into(),
+                about: l.about().into(),
+            })
+            .collect();
+        app.global::<App>()
+            .set_audio_looks(ModelRc::new(VecModel::from(looks)));
+    }
     {
         let mut st = st.borrow_mut();
         apply_theme(&app, &st);
@@ -1254,6 +1366,33 @@ fn main() -> Result<(), slint::PlatformError> {
         keyedit::corner_lights_toggled(st, on);
         keyedit::push(&app, st);
     });
+    // Audio mode
+    on!(on_audio_toggled, |app, st, on: bool| {
+        st.set_audio(on);
+        app.global::<App>().set_audio_on(on);
+    });
+    on!(on_audio_shortcut, |app, st| {
+        let on = !st.audio_on;
+        st.set_audio(on);
+        app.global::<App>().set_audio_on(on);
+    });
+    on!(on_audio_changed, |app, st| {
+        let g = app.global::<App>();
+        if let Some(l) = f16_core::audio::AudioLook::from_key(&g.get_audio_look()) {
+            st.s.audio_look = l;
+        }
+        st.s.audio_sensitivity = g.get_audio_sensitivity().clamp(1, 10) as u8;
+        if st.audio_on {
+            let set = st.audio_settings();
+            st.engine.send(Command::SetAudio(Some(set)));
+        }
+    });
+    on!(on_audio_hotkey_toggled, |app, st, on: bool| {
+        st.s.audio_hotkey = on;
+        app.global::<App>().set_audio_hotkey(on);
+        st.sync_background();
+    });
+
     on!(on_theme_chosen, |app, st, i: i32| {
         st.s.theme = theme::CHOICES
             .get(i as usize)

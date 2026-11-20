@@ -1,0 +1,41 @@
+// Audio: light shows that follow the music the PC is playing, across the keyboard and side
+// module. Ctrl+Alt+Shift+M (the same as White Rabbit's) turns it on and off.
+import { Theme } from "../theme.slint";
+import { App } from "../state.slint";
+import { Card, Group, Hint, Body, RadioButton, Status } from "../widgets.slint";
+import { OnOff, SliderRow } from "../parts.slint";
+
+export component AudioPage inherits VerticalLayout {
+    spacing: 12px;
+    Card {
+        icon: @image-url("../icons/sparkle.svg");
+        title: "Audio reactivity";
+        help: App.audio-status;
+        OnOff { checked: App.audio-on; toggled(v) => { App.audio-toggled(v); } }
+    }
+    Group {
+        title: "Show";
+        help: "Pick a show; it changes straight away. The keyboard and " + (App.has-module ? App.module-name.to-lowercase() : "side module") + " play it as one surface.";
+        for l in App.audio-looks: VerticalLayout {
+            spacing: 0px;
+            RadioButton {
+                text: l.name;
+                checked: App.audio-look == l.key;
+                clicked => { App.audio-look = l.key; App.audio-changed(); }
+            }
+            HorizontalLayout { padding-left: 30px; Hint { text: l.about; } }
+        }
+    }
+    Group {
+        title: "Sensitivity";
+        help: "Higher shows more of quiet music. Loudness is evened out automatically, like in White Rabbit.";
+        SliderRow { label: "Sensitivity"; value <=> App.audio-sensitivity; maximum: 10; minimum: 1; changed => { App.audio-changed(); } }
+    }
+    Card {
+        icon: @image-url("../icons/keyboard.svg");
+        title: "Keyboard shortcut: Ctrl+Alt+Shift+M";
+        help: "Turns audio reactivity on or off from anywhere, the same shortcut as White Rabbit's (with both apps running, it switches both).";
+        OnOff { checked: App.audio-hotkey; toggled(v) => { App.audio-hotkey-toggled(v); } }
+    }
+    Hint { text: "Audio reactivity takes over the lights while it runs. Turning it off puts back what the Lighting page shows."; }
+}

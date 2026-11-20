@@ -34,6 +34,8 @@ export struct EffectGroup {
     items: [EffectItem],
 }
 
+export struct AudioLookItem { key: string, name: string, about: string }
+
 export global App {
     in-out property <string> page: "home";
     in property <string> title: "Framework 16 Keyboard Control";
@@ -233,4 +235,17 @@ export global App {
     callback cal-changed(int);              // 0 keyboard, 1 macropad
     callback cal-reset(int);
     callback white-test-toggled(bool);
+
+    // Audio mode
+    in property <bool> audio-on;
+    in property <string> audio-status;
+    in property <[AudioLookItem]> audio-looks;
+    in-out property <string> audio-look;
+    in-out property <int> audio-sensitivity: 5;
+    in property <bool> audio-hotkey;
+    callback audio-toggled(bool);
+    callback audio-changed();
+    callback audio-hotkey-toggled(bool);
+    // Ctrl+Alt+Shift+M (from the shortcut watcher)
+    callback audio-shortcut();
 }

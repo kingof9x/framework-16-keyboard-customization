@@ -2,6 +2,7 @@
 //! (a small text file in %APPDATA%\framework-16-keyboard-control on Windows).
 
 use crate::deck::{Choice, Dev, KbType, Look, Setup};
+use f16_core::audio::AudioLook;
 use f16_core::effects::LinkedEffect;
 use f16_core::keycodes::APP_SLOTS;
 use f16_core::keys::SideModule;
@@ -32,6 +33,10 @@ pub struct Saved {
     pub autostart: Option<bool>,
     /// Keyboard type remembered per keyboard (USB serial number).
     pub kb_types: Vec<(String, KbType)>,
+    /// Audio mode: which show, how sensitive (1..10), and the Ctrl+Alt+Shift+M shortcut.
+    pub audio_look: AudioLook,
+    pub audio_sensitivity: u8,
+    pub audio_hotkey: bool,
     /// Look for a newer version when the app starts.
     pub auto_update: bool,
 }
@@ -66,6 +71,9 @@ impl Default for Saved {
             tray: true,
             autostart: None,
             kb_types: vec![],
+            audio_look: AudioLook::Spectrum,
+            audio_sensitivity: 5,
+            audio_hotkey: true,
             auto_update: true,
         }
     }
@@ -185,8 +193,13 @@ pub fn to_text(s: &Saved) -> String {
         s.brush.1
     );
     out += &format!(
-        "theme={}\ntray={}\nauto-update={}\n",
-        s.theme, s.tray, s.auto_update
+        "theme={}\ntray={}\nauto-update={}\naudio={} {} {}\n",
+        s.theme,
+        s.tray,
+        s.auto_update,
+        s.audio_look.key(),
+        s.audio_sensitivity,
+        s.audio_hotkey
     );
     if let Some(a) = s.autostart {
         out += &format!("autostart={a}\n");
@@ -258,6 +271,14 @@ pub fn from_text(text: &str) -> Saved {
             "theme" if crate::theme::CHOICES.contains(&v) => s.theme = v.to_string(),
             "tray" => s.tray = v != "false",
             "auto-update" => s.auto_update = v != "false",
+            "audio" => {
+                let p: Vec<&str> = v.split_whitespace().collect();
+                if let [look, sens, hotkey] = p[..] {
+                    s.audio_look = AudioLook::from_key(look).unwrap_or_default();
+                    s.audio_sensitivity = sens.parse::<u8>().unwrap_or(5).clamp(1, 10);
+                    s.audio_hotkey = hotkey != "false";
+                }
+            }
             "autostart" => s.autostart = Some(v == "true"),
             "app" => {
                 if let Some((n, path)) = v.split_once(' ') {
@@ -335,6 +356,9 @@ mod tests {
         s.kb.choice = Choice::Pc(LinkedEffect::Ripple);
         s.module.choice = Choice::PaintOnly;
         s.kb_types.push(("FRAKDEBZ0812".into(), KbType::BlackRgb));
+        s.audio_look = AudioLook::BassRipples;
+        s.audio_sensitivity = 8;
+        s.audio_hotkey = false;
         s.paint.insert((Dev::Keyboard, 30), (128, 255));
         s.paint.insert((Dev::Module, 3), (0, 0));
         s.apps[2] = r"C:\Program Files\Resolume Arena\Arena.exe".into();

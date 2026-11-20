@@ -1,8 +1,10 @@
 //! Background thread that owns the USB devices: applies settings, streams
 //! Linked frames and keeps a status snapshot for the UI.
 
+use crate::audio_src::Listener;
 use crate::device::{self, Device, Found};
 use crate::sim::SimPort;
+use f16_core::audio::{AudioLook, AudioShow};
 use f16_core::effects::{EffectParams, Renderer, Rgb};
 use f16_core::keycodes::{KeyWrite, Keymap};
 use f16_core::layout::{CombinedLayout, MacropadSide, Point};
@@ -56,6 +58,8 @@ pub enum Command {
         cal: proto::LedCal,
         save: bool,
     },
+    /// Audio mode: Some = draw this audio show on both devices, None = stop.
+    SetAudio(Option<AudioSettings>),
     /// Change keys in a device's keymap (saved on the device right away).
     SetKeys {
         kind: DeviceKind,
@@ -65,6 +69,20 @@ pub enum Command {
     SetCombos(proto::Combos),
     Rescan,
     Shutdown,
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct AudioSettings {
+    pub look: AudioLook,
+    /// 1..10, 5 = normal.
+    pub sensitivity: u8,
+}
+
+struct AudioRun {
+    settings: AudioSettings,
+    listener: Listener,
+    show: AudioShow,
+    last: Instant,
 }
 
 #[derive(Clone)]
@@ -104,6 +122,13 @@ pub struct Status {
     pub message: Option<String>,
     /// A Framework numpad is plugged in.
     pub numpad: bool,
+    /// Audio mode is drawing.
+    pub audio: bool,
+    /// What audio mode listens to, or why it can't.
+    pub audio_device: Option<String>,
+    pub audio_problem: Option<String>,
+    /// Audio mode's last frame per device (LED order): [keyboard, macropad].
+    pub audio_colors: [Vec<Rgb>; 2],
 }
 
 impl Status {
@@ -197,6 +222,7 @@ struct Engine {
     last_clock_sync: Instant,
     t0_clock: Instant,
     linked: Option<EffectParams>,
+    audio: Option<AudioRun>,
     renderer: Renderer,
     side: MacropadSide,
     layout: CombinedLayout,
@@ -242,6 +268,7 @@ impl Engine {
             last_clock_sync: Instant::now(),
             t0_clock: Instant::now(),
             linked: None,
+            audio: None,
             renderer: Renderer::default(),
             side: MacropadSide::default(),
             layout: CombinedLayout::default(),
@@ -264,6 +291,7 @@ impl Engine {
             loop {
                 match self.rx.try_recv() {
                     Ok(Command::Shutdown) | Err(TryRecvError::Disconnected) => {
+                        self.stop_audio();
                         self.stop_linked();
                         return;
                     }
@@ -276,7 +304,9 @@ impl Engine {
             if !all_ready && self.last_scan.is_none_or(|t| t.elapsed() >= SCAN_INTERVAL) {
                 self.scan();
             }
-            if self.linked.is_some() {
+            if self.audio.is_some() {
+                self.render_audio();
+            } else if self.linked.is_some() {
                 self.render_frame();
             }
             if self.joined && self.last_clock_sync.elapsed() >= CLOCK_SYNC_INTERVAL {
@@ -286,7 +316,7 @@ impl Engine {
                 self.refresh();
             }
 
-            let interval = if self.linked.is_some() {
+            let interval = if self.linked.is_some() || self.audio.is_some() {
                 FRAME_INTERVAL
             } else {
                 IDLE_INTERVAL
@@ -337,7 +367,41 @@ impl Engine {
                     self.refresh();
                 }
             }
+            Command::SetAudio(Some(settings)) => match self.audio.as_mut() {
+                Some(run) => {
+                    if run.settings.sensitivity != settings.sensitivity {
+                        run.listener = match Listener::start(self.demo, settings.sensitivity) {
+                            Ok(l) => l,
+                            Err(e) => {
+                                self.audio_failed(e);
+                                return;
+                            }
+                        };
+                    }
+                    run.show.look = settings.look;
+                    run.settings = settings;
+                }
+                None => match Listener::start(self.demo, settings.sensitivity) {
+                    Ok(listener) => {
+                        self.stop_linked();
+                        self.audio = Some(AudioRun {
+                            settings,
+                            listener,
+                            show: AudioShow::new(settings.look),
+                            last: Instant::now(),
+                        });
+                        self.start_linked();
+                        let mut st = self.status.lock().unwrap();
+                        st.linked = false;
+                        st.audio = true;
+                        st.audio_problem = None;
+                    }
+                    Err(e) => self.audio_failed(e),
+                },
+            },
+            Command::SetAudio(None) => self.stop_audio(),
             Command::SetLinked(Some(params)) => {
+                self.stop_audio();
                 self.renderer.params = params;
                 if self.linked.is_none() {
                     self.linked = Some(params);
@@ -478,7 +542,7 @@ impl Engine {
             match f {
                 Found::Ready(dev, info, leds) => {
                     let kind = dev.kind;
-                    if self.linked.is_some() {
+                    if self.linked.is_some() || self.audio.is_some() {
                         let _ = dev.transact(&proto::set_host_mode(true));
                     }
                     let keymap = dev.keymap().ok();
@@ -574,6 +638,60 @@ impl Engine {
             }
             st.linked = self.linked.is_some();
         }
+        (self.repaint)();
+    }
+
+    fn audio_failed(&mut self, e: String) {
+        let mut st = self.status.lock().unwrap();
+        st.audio = false;
+        st.audio_problem = Some(format!("Can't listen to the sound: {e}"));
+        drop(st);
+        (self.repaint)();
+    }
+
+    fn stop_audio(&mut self) {
+        if self.audio.take().is_none() {
+            return;
+        }
+        for o in self.open.values() {
+            let _ = o.dev.transact(&proto::set_host_mode(false));
+        }
+        let mut st = self.status.lock().unwrap();
+        st.audio = false;
+        st.audio_colors = Default::default();
+        drop(st);
+        (self.repaint)();
+    }
+
+    /// One audio mode frame: listen, update the show, draw it on both devices.
+    fn render_audio(&mut self) {
+        let Some(run) = self.audio.as_mut() else {
+            return;
+        };
+        let dt = run.last.elapsed().as_secs_f32().clamp(0.001, 0.2);
+        run.last = Instant::now();
+        let bands = run.listener.bands(dt);
+        run.show.update(&bands, dt);
+        let (device, problem) = (run.listener.device(), run.listener.problem());
+        let kinds: Vec<DeviceKind> = self.open.values().map(|o| o.dev.kind).collect();
+        let mut colors_out: [Vec<Rgb>; 2] = Default::default();
+        for &kind in &kinds {
+            let points = self.layout.points(kind).to_vec();
+            let colors = run
+                .show
+                .render(&points, self.layout.width, self.layout.height);
+            let msgs = proto::encode_frame(&colors);
+            colors_out[key(kind) as usize] = colors;
+            if let Err(e) = self.open[&key(kind)].dev.transact_many(&msgs) {
+                self.fail(kind, e);
+                return;
+            }
+        }
+        let mut st = self.status.lock().unwrap();
+        st.audio_colors = colors_out;
+        st.audio_device = device;
+        st.audio_problem = problem;
+        drop(st);
         (self.repaint)();
     }
 
