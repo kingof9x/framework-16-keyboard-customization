@@ -1,0 +1,134 @@
+// Effects: the built-in effects that run on the devices themselves, one per device or joined.
+import { Button, ComboBox } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { App } from "../state.slint";
+import { Card, Group, Hint, Body, Status, AccentButton, Slider } from "../widgets.slint";
+import { Deck, ColorPicker, SliderRow, OnOff } from "../parts.slint";
+
+// Effect, color, speed and brightness for one device (or both, joined).
+component DeviceControls inherits VerticalLayout {
+    in property <bool> rgb;
+    in-out property <int> effect;
+    in-out property <int> hue;
+    in-out property <int> sat;
+    in-out property <int> val;
+    in-out property <int> speed;
+    in property <color> full;
+    in property <color> picked;
+    in property <string> hex;
+    callback changed();
+    spacing: 8px;
+    if root.rgb: HorizontalLayout {
+        spacing: 12px;
+        Body { text: "Effect"; width: 96px; vertical-alignment: center; }
+        ComboBox {
+            horizontal-stretch: 1;
+            model: App.effect-names;
+            current-index <=> root.effect;
+            selected => { root.changed(); }
+        }
+    }
+    if root.rgb: ColorPicker {
+        hue <=> root.hue;
+        sat <=> root.sat;
+        full: root.full;
+        picked: root.picked;
+        hex: root.hex;
+        changed => { root.changed(); }
+    }
+    if root.rgb: SliderRow { label: "Speed"; value <=> root.speed; changed => { root.changed(); } }
+    if !root.rgb: Hint { text: "White backlight: one light for all keys, so only brightness can be changed."; }
+    SliderRow { label: "Brightness"; value <=> root.val; changed => { root.changed(); } }
+}
+
+export component EffectsPage inherits VerticalLayout {
+    spacing: 12px;
+    Deck { }
+    HorizontalLayout {
+        spacing: 8px;
+        Status { text: App.deck-caption; vertical-alignment: center; horizontal-stretch: 1; }
+        Button { text: "Save as default"; clicked => { App.send-effects(true); } }
+        AccentButton { text: "Send to devices"; clicked => { App.send-effects(false); } }
+    }
+    if App.has-module: Card {
+        icon: @image-url("../icons/arrow_swap.svg");
+        title: "Join into one device";
+        help: "One effect runs across the keyboard and " + App.module-name.to-lowercase() + " as one surface: a sweep starts on the keyboard and finishes at the far edge of the " + App.module-name.to-lowercase() + ".";
+        OnOff { checked: App.join; toggled(v) => { App.join-toggled(v); } }
+    }
+    if App.join && App.has-module: Group {
+        title: "Keyboard + " + App.module-name + ", joined";
+        help: "One effect running across both as one surface.";
+        DeviceControls {
+            rgb: App.kb-rgb || App.mod-rgb;
+            effect <=> App.kb-effect;
+            hue <=> App.kb-hue;
+            sat <=> App.kb-sat;
+            val <=> App.kb-val;
+            speed <=> App.kb-speed;
+            full: App.kb-full;
+            picked: App.kb-picked;
+            hex: App.kb-hex;
+            changed => { App.effects-changed(); }
+        }
+    }
+    if !App.join || !App.has-module: Group {
+        title: "Keyboard";
+        help: App.kb-about;
+        DeviceControls {
+            rgb: App.kb-rgb;
+            effect <=> App.kb-effect;
+            hue <=> App.kb-hue;
+            sat <=> App.kb-sat;
+            val <=> App.kb-val;
+            speed <=> App.kb-speed;
+            full: App.kb-full;
+            picked: App.kb-picked;
+            hex: App.kb-hex;
+            changed => { App.effects-changed(); }
+        }
+        if App.has-module && App.kb-rgb && App.mod-rgb: HorizontalLayout {
+            alignment: start;
+            Button { text: "Copy to " + App.module-name; clicked => { App.copy-settings(0); } }
+        }
+    }
+    if !App.join && App.has-module: Group {
+        title: App.module-name;
+        help: App.mod-about;
+        DeviceControls {
+            rgb: App.mod-rgb;
+            effect <=> App.mod-effect;
+            hue <=> App.mod-hue;
+            sat <=> App.mod-sat;
+            val <=> App.mod-val;
+            speed <=> App.mod-speed;
+            full: App.mod-full;
+            picked: App.mod-picked;
+            hex: App.mod-hex;
+            changed => { App.effects-changed(); }
+        }
+        if App.kb-rgb && App.mod-rgb: HorizontalLayout {
+            alignment: start;
+            Button { text: "Copy to Keyboard"; clicked => { App.copy-settings(1); } }
+        }
+    }
+    if App.side == 1: Card {
+        icon: @image-url("../icons/target_arrow.svg");
+        title: "Macropad brightness";
+        help: "If the macropad looks brighter or dimmer than the keyboard at the same setting, even it out here. Applied when you send.";
+        HorizontalLayout {
+            spacing: 10px;
+            width: 300px;
+            Slider {
+                horizontal-stretch: 1;
+                minimum: 50;
+                maximum: 150;
+                step: 5;
+                value <=> App.pad-balance;
+                released => { App.pad-balance-changed(); }
+            }
+            Body { text: round(App.pad-balance) + "%"; width: 44px; vertical-alignment: center; horizontal-alignment: right; }
+        }
+    }
+    Hint { text: "Built-in effects run on the devices themselves, even when the app is closed. Nothing changes until you press Send to devices."; }
+}

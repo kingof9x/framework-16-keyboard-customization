@@ -4,6 +4,7 @@
 use crate::device::{self, Device, Found};
 use crate::sim::SimPort;
 use f16_core::effects::{EffectParams, Renderer, Rgb};
+use f16_core::keycodes::{KeyWrite, Keymap};
 use f16_core::layout::{CombinedLayout, MacropadSide, Point};
 use f16_core::protocol::{self as proto, DeviceInfo, DeviceKind, LedPoint, LightState};
 use hidapi::HidApi;
@@ -49,6 +50,13 @@ pub enum Command {
         follow: bool,
         save: bool,
     },
+    /// Change keys in a device's keymap (saved on the device right away).
+    SetKeys {
+        kind: DeviceKind,
+        writes: Vec<KeyWrite>,
+    },
+    /// Macropad corner combos (saved on the macropad).
+    SetCombos(proto::Combos),
     Rescan,
     Shutdown,
 }
@@ -60,6 +68,10 @@ pub struct DeviceStatus {
     pub streaming: bool,
     /// LED positions, used to match keys to LEDs.
     pub leds: Vec<LedPoint>,
+    /// What each key sends; None if it could not be read.
+    pub keymap: Option<Keymap>,
+    /// Macropad corner combos; None on the keyboard and on older macropad firmware.
+    pub combos: Option<proto::Combos>,
 }
 
 #[derive(Clone, Default)]
@@ -102,6 +114,8 @@ struct Open {
     dev: Device,
     info: DeviceInfo,
     leds: Vec<LedPoint>,
+    keymap: Option<Keymap>,
+    combos: Option<proto::Combos>,
 }
 
 pub struct EngineHandle {
@@ -361,6 +375,34 @@ impl Engine {
                     }
                 }
             }
+            Command::SetKeys { kind, writes } => {
+                if let Some(o) = self.open.get_mut(&key(kind)) {
+                    let reqs: Vec<_> = writes
+                        .iter()
+                        .map(|&(l, r, c, code)| proto::set_keycode(l, r, c, code))
+                        .collect();
+                    match o.dev.transact_many(&reqs) {
+                        Ok(()) => {
+                            if let Some(km) = o.keymap.as_mut() {
+                                km.apply(&writes);
+                            }
+                            self.refresh();
+                        }
+                        Err(e) => self.fail(kind, e),
+                    }
+                }
+            }
+            Command::SetCombos(c) => {
+                if let Some(o) = self.open.get_mut(&key(DeviceKind::Macropad)) {
+                    match o.dev.transact(&proto::set_combos(&c)) {
+                        Ok(_) => {
+                            o.combos = Some(c);
+                            self.refresh();
+                        }
+                        Err(e) => self.fail(DeviceKind::Macropad, e),
+                    }
+                }
+            }
             Command::Rescan => {
                 self.last_scan = None;
             }
@@ -421,7 +463,22 @@ impl Engine {
                     if self.linked.is_some() {
                         let _ = dev.transact(&proto::set_host_mode(true));
                     }
-                    self.open.insert(key(kind), Open { dev, info, leds });
+                    let keymap = dev.keymap().ok();
+                    let combos = if kind == DeviceKind::Macropad {
+                        dev.combos().ok().flatten()
+                    } else {
+                        None
+                    };
+                    self.open.insert(
+                        key(kind),
+                        Open {
+                            dev,
+                            info,
+                            leds,
+                            keymap,
+                            combos,
+                        },
+                    );
                     added = true;
                 }
                 Found::Stock(kind) => stock.push(kind),
@@ -463,14 +520,15 @@ impl Engine {
                 Ok((info, (state, streaming))) => {
                     let o = self.open.get_mut(&key(kind)).unwrap();
                     o.info = info.clone();
-                    let leds = o.leds.clone();
                     updates.push((
                         kind,
                         Slot::Ready(DeviceStatus {
                             info,
                             state,
                             streaming,
-                            leds,
+                            leds: o.leds.clone(),
+                            keymap: o.keymap.clone(),
+                            combos: o.combos,
                         }),
                     ));
                 }

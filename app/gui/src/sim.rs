@@ -3,6 +3,7 @@
 //! by the engine tests.
 
 use crate::device::{Port, Result};
+use f16_core::keycodes::Board;
 use f16_core::keys::{KEYBOARD_LEDS, MACROPAD_LEDS};
 use f16_core::protocol::{self as proto, Report, ValueId};
 use std::cell::RefCell;
@@ -34,6 +35,9 @@ struct SimState {
     paint: Vec<[u8; 3]>,
     saved_paint: Vec<[u8; 3]>,
     follow: bool,
+    /// VIA keymap buffer: layers of rows x columns, 2 bytes each (big endian).
+    keymap: Vec<u8>,
+    combos: [u8; 7],
 }
 
 pub struct SimPort(RefCell<SimState>);
@@ -67,11 +71,56 @@ impl SimPort {
             paint: vec![[0; 3]; n],
             saved_paint: vec![[0; 3]; n],
             follow: true,
+            keymap: default_buffer(if macropad {
+                Board::Macropad
+            } else {
+                Board::Keyboard
+            }),
+            combos: [1, 1, 0, 0, 0, 0, 0],
         }))
     }
 }
 
+/// VIA's keymap buffer as the firmware starts out: the f16custom default keymap.
+fn default_buffer(board: Board) -> Vec<u8> {
+    let (_, cols) = board.matrix_size();
+    let per = board.layer_bytes();
+    let mut buf = vec![0u8; per * board.layers() as usize];
+    for l in 0..board.layers() {
+        for (k, &(r, c)) in board.matrix().iter().enumerate() {
+            let at = l as usize * per + (r as usize * cols as usize + c as usize) * 2;
+            buf[at..at + 2].copy_from_slice(&board.default_code(l, k).to_be_bytes());
+        }
+    }
+    buf
+}
+
 impl SimState {
+    /// VIA's own keymap commands (not on the custom channel).
+    fn handle_via(&mut self, req: &Report) -> Option<Report> {
+        let mut r = *req;
+        let cols = if self.macropad { 8 } else { 16 };
+        match req[0] {
+            proto::VIA_GET_BUFFER => {
+                let off = u16::from_be_bytes([req[1], req[2]]) as usize;
+                let n = (req[3] as usize).min(proto::KEYMAP_BYTES_PER_MSG);
+                for i in 0..n {
+                    r[4 + i] = self.keymap.get(off + i).copied().unwrap_or(0);
+                }
+            }
+            proto::VIA_SET_KEYCODE => {
+                let at = (req[1] as usize * self.keymap.len() / if self.macropad { 2 } else { 4 })
+                    + (req[2] as usize * cols + req[3] as usize) * 2;
+                if at + 1 < self.keymap.len() {
+                    self.keymap[at] = req[4];
+                    self.keymap[at + 1] = req[5];
+                }
+            }
+            _ => return None,
+        }
+        Some(r)
+    }
+
     fn rand(&mut self) -> u32 {
         // xorshift: good enough for pretend key presses
         self.seed ^= self.seed << 13;
@@ -91,6 +140,9 @@ impl SimState {
     }
 
     fn handle(&mut self, req: &Report) -> Report {
+        if let Some(r) = self.handle_via(req) {
+            return r;
+        }
         let mut r = *req;
         let d = &mut r[3..];
         let get = req[0] == proto::CMD_GET;
@@ -110,6 +162,7 @@ impl SimState {
         const CLOCK: u8 = ValueId::Clock as u8;
         const PAINT: u8 = ValueId::Paint as u8;
         const PAINT_CTRL: u8 = ValueId::PaintCtrl as u8;
+        const COMBOS: u8 = ValueId::Combos as u8;
         if self.host && self.last_frame.elapsed() > Duration::from_secs(3) {
             self.host = false; // same fallback as the firmware
         }
@@ -256,6 +309,14 @@ impl SimState {
                 }
                 _ => false,
             },
+            (true, COMBOS) if self.macropad => {
+                d[..7].copy_from_slice(&self.combos);
+                true
+            }
+            (false, COMBOS) if self.macropad => {
+                self.combos.copy_from_slice(&d[..7]);
+                true
+            }
             _ => false,
         };
         if !ok {

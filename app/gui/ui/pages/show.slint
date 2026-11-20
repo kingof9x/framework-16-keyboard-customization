@@ -1,0 +1,76 @@
+// Show: try any effect across both devices as one surface, and paint keys with your own colors.
+import { Button } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { App } from "../state.slint";
+import { Group, Hint, Body, Status, AccentButton, RadioButton, Switch } from "../widgets.slint";
+import { Deck, ColorPicker, SliderRow, EffectButtons } from "../parts.slint";
+
+export component ShowPage inherits VerticalLayout {
+    spacing: 12px;
+    Deck { }
+    HorizontalLayout {
+        spacing: 8px;
+        Status { text: App.deck-caption; vertical-alignment: center; horizontal-stretch: 1; }
+        if App.pc-live: Button { text: "Stop"; clicked => { App.stop-pc(); } }
+        Button { text: "Save as default"; clicked => { App.send-show(true); } }
+        AccentButton { text: "Send to devices"; clicked => { App.send-show(false); } }
+    }
+    Group {
+        title: "Effect";
+        help: App.show-effect-name + ". Runs across the keyboard and side module as one surface.";
+        for g in App.effect-groups: VerticalLayout {
+            spacing: 4px;
+            Hint { text: g.name; }
+            EffectButtons {
+                items: g.items;
+                selected: App.show-effect;
+                picked(k) => { App.show-effect = k; App.show-changed(); }
+            }
+        }
+    }
+    Group {
+        title: "Effect color, speed and brightness";
+        ColorPicker {
+            hue <=> App.show-hue;
+            sat <=> App.show-sat;
+            full: App.show-full;
+            picked: App.show-picked;
+            hex: App.show-hex;
+            changed => { App.show-changed(); }
+        }
+        SliderRow { label: "Speed"; value <=> App.show-speed; changed => { App.show-changed(); } }
+        SliderRow { label: "Brightness"; value <=> App.show-val; changed => { App.show-changed(); } }
+    }
+    Group {
+        title: "Key colors";
+        help: "Pick a color, then click or drag across keys in the picture. Painted keys keep their color while the effect keeps running around them. " + App.paint-count + ".";
+        HorizontalLayout {
+            spacing: 16px;
+            alignment: start;
+            RadioButton { text: "Paint"; checked: App.paint-tool == 0; clicked => { App.paint-tool = 0; } }
+            RadioButton { text: "Erase"; checked: App.paint-tool == 1; clicked => { App.paint-tool = 1; } }
+            Button { text: "Example: WASD and arrows"; clicked => { App.paint-example(); } }
+            Button { text: "Clear painted keys"; clicked => { App.paint-clear(); } }
+        }
+        HorizontalLayout {
+            spacing: 12px;
+            alignment: start;
+            VerticalLayout {
+                alignment: center;
+                Switch { checked <=> App.follow; toggled => { App.show-changed(); } }
+            }
+            Body {
+                text: App.follow ? "Painted keys still react to the effect: they brighten and dim with it." : "Painted keys stay at a steady color.";
+                vertical-alignment: center;
+            }
+        }
+        ColorPicker {
+            hue <=> App.brush-hue;
+            sat <=> App.brush-sat;
+            full: App.brush-full;
+            picked: App.brush-picked;
+            hex: App.brush-hex;
+            changed => { App.show-changed(); }
+        }
+    }
+}

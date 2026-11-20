@@ -1,0 +1,2 @@
+// Windows resources: the app icon (Explorer, taskbar, installer, tray)
+1 ICON "app.ico"

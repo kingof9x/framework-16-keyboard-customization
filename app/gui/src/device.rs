@@ -1,5 +1,6 @@
 //! HID access to the keyboard and macropad (hidapi).
 
+use f16_core::keycodes::{Board, Keymap};
 use f16_core::protocol::{
     self as proto, DeviceInfo, DeviceKind, LedPoint, ProtocolError, Report, REPORT_LEN,
 };
@@ -123,12 +124,48 @@ impl Device {
         Ok(())
     }
 
+    /// Reads the device's keymap (VIA dynamic keymap, the layers the app edits).
+    pub fn keymap(&self) -> Result<Keymap> {
+        let board = match self.kind {
+            DeviceKind::Keyboard => Board::Keyboard,
+            DeviceKind::Macropad => Board::Macropad,
+        };
+        let mut buf = Vec::new();
+        for r in proto::keymap_buffer_requests(board.layer_bytes() * board.layers() as usize) {
+            let p = self.transact(&r)?;
+            buf.extend_from_slice(proto::parse_keymap_buffer(&p));
+        }
+        Keymap::from_buffer(board, &buf).ok_or(DeviceError::Protocol(ProtocolError::Invalid(
+            "short keymap",
+        )))
+    }
+
+    /// Macropad corner combos; None on firmware without them.
+    pub fn combos(&self) -> Result<Option<proto::Combos>> {
+        match self.transact(&proto::combos_request()) {
+            Ok(p) => Ok(Some(proto::parse_combos(&p))),
+            Err(DeviceError::Protocol(ProtocolError::Unsupported)) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
     pub fn info(&self) -> Result<DeviceInfo> {
         let p = self.transact(&proto::info_request())?;
         Ok(proto::parse_info(&p)?)
     }
 
+    /// LED positions. For the keyboard and macropad these come from Framework's
+    /// source (built into the app) rather than the device: while the devices are
+    /// joined, the firmware squeezes its positions into its slice of the shared
+    /// surface, and matching keys against those put painted keys on the wrong LEDs.
     pub fn led_points(&self, count: u8) -> Result<Vec<LedPoint>> {
+        let known: &[(u8, u8)] = match self.kind {
+            DeviceKind::Keyboard => &f16_core::keys::KEYBOARD_LEDS,
+            DeviceKind::Macropad => &f16_core::keys::MACROPAD_LEDS,
+        };
+        if known.len() == count as usize {
+            return Ok(f16_core::keys::firmware_leds(known));
+        }
         let mut out = Vec::with_capacity(count as usize);
         for req in proto::led_info_requests(count) {
             out.extend(proto::parse_led_info(&self.transact(&req)?));
@@ -191,5 +228,47 @@ pub fn identify(dev: Device) -> Found {
             Err(_) => Found::Stock(kind),
         },
         Err(_) => Found::Stock(kind),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sim::SimPort;
+    use f16_core::keycodes::app_code;
+
+    #[test]
+    fn keymap_and_combos_through_the_pretend_devices() {
+        let kb = Device::new(DeviceKind::Keyboard, Box::new(SimPort::keyboard()));
+        let km = kb.keymap().unwrap();
+        assert_eq!(km, Keymap::defaults(Board::Keyboard));
+        // Fn + F12 opens app 1: written to the Fn and Fn-lock layers
+        let writes = km.writes(1, 12, Some(app_code(0)));
+        let reqs: Vec<Report> = writes
+            .iter()
+            .map(|&(l, r, c, code)| proto::set_keycode(l, r, c, code))
+            .collect();
+        kb.transact_many(&reqs).unwrap();
+        let km = kb.keymap().unwrap();
+        assert_eq!(km.code(1, 12), app_code(0));
+        assert_eq!(km.layers[2][12], app_code(0));
+        assert_eq!(
+            km.code(0, 12),
+            Keymap::defaults(Board::Keyboard).code(0, 12)
+        );
+        assert_eq!(kb.combos().unwrap(), None);
+
+        let pad = Device::new(DeviceKind::Macropad, Box::new(SimPort::macropad()));
+        assert_eq!(pad.keymap().unwrap(), Keymap::defaults(Board::Macropad));
+        assert_eq!(pad.combos().unwrap(), Some(proto::Combos::default()));
+        let c = proto::Combos {
+            top_on: false,
+            bottom_on: true,
+            top_action: 0,
+            bottom_action: app_code(3),
+            corner_lights: true,
+        };
+        pad.transact(&proto::set_combos(&c)).unwrap();
+        assert_eq!(pad.combos().unwrap(), Some(c));
     }
 }

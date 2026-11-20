@@ -1,0 +1,30 @@
+// Your setup: which keyboard, which side module, and which side it is on.
+import { Theme } from "../theme.slint";
+import { App } from "../state.slint";
+import { Group, Hint, RadioButton } from "../widgets.slint";
+import { Deck } from "../parts.slint";
+
+export component SetupPage inherits VerticalLayout {
+    spacing: 12px;
+    Deck { }
+    Group {
+        title: "Keyboard";
+        help: "The app can't tell these apart, so pick yours.";
+        RadioButton { text: "Clear RGB keys"; checked: App.kb-type == 0; clicked => { App.kb-type = 0; App.setup-changed(); } }
+        RadioButton { text: "Black RGB keys"; checked: App.kb-type == 1; clicked => { App.kb-type = 1; App.setup-changed(); } }
+        RadioButton { text: "Black keys, white backlight"; checked: App.kb-type == 2; clicked => { App.kb-type = 2; App.setup-changed(); } }
+    }
+    Group {
+        title: "Side module";
+        help: "The app picks RGB macropad by itself when it finds one.";
+        RadioButton { text: "None"; checked: App.side == 0; clicked => { App.side = 0; App.setup-changed(); } }
+        RadioButton { text: "RGB macropad"; checked: App.side == 1; clicked => { App.side = 1; App.setup-changed(); } }
+        RadioButton { text: "Numpad"; checked: App.side == 2; clicked => { App.side = 2; App.setup-changed(); } }
+    }
+    if App.side != 0: Group {
+        title: "Placed on the";
+        RadioButton { text: "Left of the keyboard"; checked: App.module-left; clicked => { App.module-left = true; App.setup-changed(); } }
+        RadioButton { text: "Right of the keyboard"; checked: !App.module-left; clicked => { App.module-left = false; App.setup-changed(); } }
+    }
+    if App.setup-note != "": Hint { text: App.setup-note; }
+}

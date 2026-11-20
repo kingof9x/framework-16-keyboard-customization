@@ -1,0 +1,42 @@
+// Home: each part of the app, like White Rabbit's Home page. Click a card to open its page.
+import { Theme } from "../theme.slint";
+import { App } from "../state.slint";
+import { Card, SectionTitle, Status } from "../widgets.slint";
+import { OnOff } from "../parts.slint";
+
+component Link inherits Card {
+    in property <string> key;
+    link: true;
+    clicked => { App.page = key; }
+}
+
+export component HomePage inherits VerticalLayout {
+    spacing: 4px;
+    if App.update-available: Link { key: "settings"; icon: @image-url("../icons/info.svg"); title: "Update available"; help: App.update-status; }
+    SectionTitle { text: "Lights"; }
+    Link { key: "show"; icon: @image-url("../icons/sparkle.svg"); title: "Show";
+        help: "Try any effect across the keyboard and side module, and paint keys with your own colors."; }
+    Link { key: "effects"; icon: @image-url("../icons/dark_theme.svg"); title: "Effects"; help: App.effects-summary; }
+    Link { key: "keys"; icon: @image-url("../icons/key_edit.svg"); title: "Keys";
+        help: App.keys-changed == 0 ? "Change what any key does, turn keys off, or make a key open an app." : App.keys-changed == 1 ? "1 key changed from the Framework default." : App.keys-changed + " keys changed from the Framework default."; }
+    if App.has-module: Card {
+        icon: @image-url("../icons/arrow_swap.svg");
+        title: "Join into one device";
+        help: "Run one effect across the keyboard and " + App.module-name.to-lowercase() + " as one surface. Keeps running with the app closed.";
+        OnOff { checked: App.join; toggled(v) => { App.join-toggled(v); } }
+    }
+    Card {
+        icon: @image-url("../icons/target_arrow.svg");
+        title: "Fn lighting keys";
+        help: "Fn + lighting keys and the macropad's lighting controls. Turn them off so the lights can't change by accident.";
+        OnOff { checked: !App.hotkey-lock; toggled(v) => { App.lock-toggled(!v); } }
+    }
+    Rectangle { height: 14px; }
+    SectionTitle { text: "Hardware"; }
+    Link { key: "setup"; icon: @image-url("../icons/keyboard.svg"); title: "Your setup"; help: App.setup-summary; }
+    if App.side == 1: Link { key: "macropad"; icon: @image-url("../icons/grid.svg"); title: "Macropad";
+        help: App.layer == 0 ? "Layer A: MIDI notes. Switch layers and see what each key sends." : "Layer B: F13 to F24 keys. Switch layers and see what each key sends."; }
+    Link { key: "firmware"; icon: @image-url("../icons/developer_board.svg"); title: "Firmware";
+        help: "Restart the keyboard or macropad into flashing mode to install new firmware."; }
+    if App.status != "": Status { text: App.status; }
+}

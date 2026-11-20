@@ -1,9 +1,5 @@
-//! The live keyboard + side module picture: layout, preview colors and drawing.
+//! The live keyboard + side module picture: layout and preview colors (drawn in render.rs).
 
-use eframe::egui::{
-    self, epaint, Align2, Color32, CornerRadius, FontId, Pos2, Rect, Sense, Stroke, StrokeKind,
-    Vec2,
-};
 use f16_core::builtin::{self, BuiltinSim, EffectCfg, SimLed};
 use f16_core::effects::{EffectParams, LinkedEffect, Renderer, Rgb};
 use f16_core::keys::{self, KeyDef, SideModule, KEYBOARD_SIZE, MODULE_GRID};
@@ -128,7 +124,23 @@ pub struct Scene<'a> {
     pub follow: bool,
     pub macropad_layer: u8,
     pub show_paint_marks: bool,
-    pub selected_module_key: Option<usize>,
+    /// The key drawn with an accent outline (Macropad and Keys pages).
+    pub selected: Option<(Dev, usize)>,
+}
+
+/// A rectangle in deck key units.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct R {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+}
+
+impl R {
+    pub fn contains(&self, x: f32, y: f32) -> bool {
+        x >= self.x && x <= self.x + self.w && y >= self.y && y <= self.y + self.h
+    }
 }
 
 /// A key placed on the deck.
@@ -137,7 +149,8 @@ pub struct PlacedKey {
     pub dev: Dev,
     pub index: usize,
     pub def: KeyDef,
-    pub rect: Rect,
+    /// In deck key units.
+    pub rect: R,
     /// Centre in deck key units (for the app-drawn effects).
     pub deck: Point,
     /// Position on its own device in QMK's 0..224 x 0..64 space.
@@ -197,16 +210,11 @@ pub fn span_slices(setup: &Setup) -> ((u8, u8), (u8, u8)) {
     builtin::span_slices(KEYBOARD_SIZE.0, module_w, SEAM, setup.module_left)
 }
 
-pub fn place_keys(setup: &Setup, layer: u8, origin: Pos2, unit: f32) -> Vec<PlacedKey> {
+/// Every key on the deck, in deck key units.
+pub fn place_keys(setup: &Setup, layer: u8) -> Vec<PlacedKey> {
     let g = geo(setup);
     let mut out = Vec::new();
-    let px = |x: f32, y: f32| origin + Vec2::new(x * unit, y * unit);
     for (i, def) in keys::keyboard_keys().into_iter().enumerate() {
-        let r = Rect::from_min_size(
-            px(g.kb_x + def.x, g.pad + def.y),
-            Vec2::new(def.w * unit, def.h * unit),
-        )
-        .shrink(2.0);
         let (cx, cy) = def.center();
         out.push(PlacedKey {
             dev: Dev::Keyboard,
@@ -217,17 +225,17 @@ pub fn place_keys(setup: &Setup, layer: u8, origin: Pos2, unit: f32) -> Vec<Plac
                 y: g.pad + cy,
             },
             rgb: setup.kb.rgb(),
-            rect: r,
+            rect: R {
+                x: g.kb_x + def.x,
+                y: g.pad + def.y,
+                w: def.w,
+                h: def.h,
+            },
             def,
         });
     }
     let s = module_scale();
     for (i, def) in keys::module_keys(setup.side, layer).into_iter().enumerate() {
-        let r = Rect::from_min_size(
-            px(g.mod_x + def.x * s, g.pad + def.y * s),
-            Vec2::new(def.w * s * unit, def.h * s * unit),
-        )
-        .shrink(2.0);
         let (cx, cy) = def.center();
         out.push(PlacedKey {
             dev: Dev::Module,
@@ -238,11 +246,82 @@ pub fn place_keys(setup: &Setup, layer: u8, origin: Pos2, unit: f32) -> Vec<Plac
                 y: g.pad + cy * s,
             },
             rgb: setup.side == SideModule::Macropad,
-            rect: r,
+            rect: R {
+                x: g.mod_x + def.x * s,
+                y: g.pad + def.y * s,
+                w: def.w * s,
+                h: def.h * s,
+            },
             def,
         });
     }
     out
+}
+
+/// The deck's parts that are not keys, in key units: (total size, plates, spacers, seam x).
+pub struct Shell {
+    pub size: (f32, f32),
+    pub plates: Vec<(R, [bool; 4])>,
+    pub spacers: Vec<R>,
+    pub seam: Option<f32>,
+}
+
+/// Rounded corners per plate: [top-left, top-right, bottom-right, bottom-left].
+pub fn shell(setup: &Setup) -> Shell {
+    let g = geo(setup);
+    let plate = |x: f32, w: f32| R {
+        x: x - 0.18,
+        y: g.pad - 0.18,
+        w: w + 0.36,
+        h: KEYBOARD_SIZE.1 + 0.36,
+    };
+    let has = setup.side != SideModule::None;
+    let (left, right, all) = (
+        [true, false, false, true],
+        [false, true, true, false],
+        [true; 4],
+    );
+    let mut plates = vec![(
+        plate(g.kb_x, KEYBOARD_SIZE.0),
+        if !has {
+            all
+        } else if setup.module_left {
+            right
+        } else {
+            left
+        },
+    )];
+    let mut spacers = vec![];
+    let mut seam = None;
+    if has {
+        let mp = plate(g.mod_x, g.module_w);
+        seam = Some(if setup.module_left {
+            plates[0].0.x
+        } else {
+            mp.x
+        });
+        plates.push((mp, if setup.module_left { left } else { right }));
+    } else {
+        for x in [g.pad, g.kb_x + KEYBOARD_SIZE.0 + SEAM] {
+            spacers.push(R {
+                x: x - 0.18,
+                y: g.pad - 0.18,
+                w: g.spacer_w,
+                h: KEYBOARD_SIZE.1 + 0.36,
+            });
+        }
+    }
+    Shell {
+        size: (g.total_w, g.total_h),
+        plates,
+        spacers,
+        seam,
+    }
+}
+
+/// The key under a point in deck key units.
+pub fn key_at(keys: &[PlacedKey], x: f32, y: f32) -> Option<&PlacedKey> {
+    keys.iter().find(|k| k.rect.contains(x, y))
 }
 
 /// Runs the effects for the preview, including pretend typing.
@@ -420,269 +499,4 @@ impl Preview {
         }
         out
     }
-}
-
-fn rgb32(c: Rgb) -> Color32 {
-    Color32::from_rgb(c[0], c[1], c[2])
-}
-
-fn glow(painter: &egui::Painter, rect: Rect, radius: u8, c: Rgb, alpha: f32, blur: f32) {
-    if alpha <= 0.01 {
-        return;
-    }
-    let shadow = epaint::Shadow {
-        offset: [0, 0],
-        blur: blur.clamp(0.0, 255.0) as u8,
-        spread: 1,
-        color: Color32::from_rgba_unmultiplied(c[0], c[1], c[2], (alpha * 255.0) as u8),
-    };
-    painter.add(shadow.as_shape(rect, radius));
-}
-
-/// Draws the deck and returns the placed keys and the response (for painting / picking).
-pub fn draw(
-    ui: &mut egui::Ui,
-    scene: &Scene,
-    preview: &mut Preview,
-    height_cap: f32,
-) -> (egui::Response, Vec<PlacedKey>) {
-    let g = geo(&scene.setup);
-    let avail = ui.available_width().min(1180.0);
-    let unit = (avail / g.total_w).min(height_cap / g.total_h);
-    let size = Vec2::new(g.total_w * unit, g.total_h * unit);
-    let (resp, painter) = ui.allocate_painter(size, Sense::click_and_drag());
-    let origin = resp.rect.min;
-    let keys = place_keys(&scene.setup, scene.macropad_layer, origin, unit);
-    let colors = preview.colors(scene, &keys);
-
-    // laptop deck and module plates
-    painter.rect_filled(
-        resp.rect,
-        CornerRadius::same(16),
-        Color32::from_rgb(0x64, 0x66, 0x6c),
-    );
-    let plate = |x: f32, w: f32, r: CornerRadius| {
-        let rect = Rect::from_min_size(
-            origin + Vec2::new((x - 0.18) * unit, (g.pad - 0.18) * unit),
-            Vec2::new((w + 0.36) * unit, (KEYBOARD_SIZE.1 + 0.36) * unit),
-        );
-        painter.rect_filled(rect, r, Color32::from_rgb(0x0c, 0x0c, 0x0e));
-        rect
-    };
-    let has = scene.setup.side != SideModule::None;
-    let (rl, rr) = (
-        CornerRadius {
-            nw: 9,
-            sw: 9,
-            ne: 0,
-            se: 0,
-        },
-        CornerRadius {
-            nw: 0,
-            sw: 0,
-            ne: 9,
-            se: 9,
-        },
-    );
-    let kb_plate = plate(
-        g.kb_x,
-        KEYBOARD_SIZE.0,
-        if !has {
-            CornerRadius::same(9)
-        } else if scene.setup.module_left {
-            rr
-        } else {
-            rl
-        },
-    );
-    if has {
-        let mp = plate(
-            g.mod_x,
-            g.module_w,
-            if scene.setup.module_left { rl } else { rr },
-        );
-        let seam_x = if scene.setup.module_left {
-            kb_plate.left()
-        } else {
-            mp.left()
-        };
-        painter.line_segment(
-            [
-                Pos2::new(seam_x, kb_plate.top()),
-                Pos2::new(seam_x, kb_plate.bottom()),
-            ],
-            Stroke::new(1.5, Color32::BLACK),
-        );
-    } else {
-        for x in [g.pad, g.kb_x + KEYBOARD_SIZE.0 + SEAM] {
-            let r = Rect::from_min_size(
-                origin + Vec2::new((x - 0.18) * unit, (g.pad - 0.18) * unit),
-                Vec2::new(g.spacer_w * unit, (KEYBOARD_SIZE.1 + 0.36) * unit),
-            );
-            painter.rect_filled(
-                r,
-                CornerRadius::same(9),
-                Color32::from_rgb(0x72, 0x74, 0x7a),
-            );
-        }
-    }
-
-    let fs = (unit * 0.3).max(8.0);
-    let accent = ui.visuals().selection.bg_fill;
-    for (k, &c) in keys.iter().zip(&colors) {
-        let material = match k.dev {
-            Dev::Keyboard => scene.setup.kb,
-            Dev::Module => {
-                if scene.setup.side == SideModule::Macropad {
-                    KbType::ClearRgb
-                } else {
-                    KbType::White
-                }
-            }
-        };
-        draw_key(&painter, k, c, material, fs);
-        if scene.show_paint_marks && scene.paint.contains_key(&(k.dev, k.index)) {
-            painter.circle_filled(
-                Pos2::new(k.rect.right() - 6.0, k.rect.top() + 6.0),
-                2.6,
-                Color32::from_white_alpha(230),
-            );
-        }
-        if k.dev == Dev::Module && scene.selected_module_key == Some(k.index) {
-            painter.rect_stroke(
-                k.rect,
-                CornerRadius::same(7),
-                Stroke::new(2.5, accent),
-                StrokeKind::Inside,
-            );
-        }
-    }
-    (resp, keys)
-}
-
-fn draw_key(painter: &egui::Painter, k: &PlacedKey, c: Rgb, material: KbType, fs: f32) {
-    let r = k.rect;
-    let lvl = c.iter().copied().max().unwrap_or(0) as f32 / 255.0;
-    let face = Rect::from_min_max(r.min + Vec2::new(4.0, 3.0), r.max - Vec2::new(4.0, 7.0));
-    let legend_color = match material {
-        KbType::ClearRgb => {
-            glow(painter, r, 7, c, 0.25 + 0.6 * lvl, 3.0 + 16.0 * lvl);
-            // frosted white when dark, LED color when lit
-            let frost = 150.0 * (1.0 - lvl) + 40.0;
-            let f = |q: u8| (frost + q as f32 * 0.85).min(255.0) as u8;
-            let fc = [f(c[0]), f(c[1]), f(c[2])];
-            painter.rect_filled(
-                r,
-                CornerRadius::same(7),
-                Color32::from_rgb(
-                    (fc[0] as f32 * 0.62) as u8,
-                    (fc[1] as f32 * 0.62) as u8,
-                    (fc[2] as f32 * 0.62) as u8,
-                ),
-            );
-            painter.rect_filled(face, CornerRadius::same(5), rgb32(fc));
-            painter.line_segment(
-                [
-                    face.left_top() + Vec2::new(4.0, 0.5),
-                    face.right_top() + Vec2::new(-4.0, 0.5),
-                ],
-                Stroke::new(1.0, Color32::from_white_alpha(90)),
-            );
-            let lum = 0.299 * fc[0] as f32 + 0.587 * fc[1] as f32 + 0.114 * fc[2] as f32;
-            if lum > 125.0 {
-                Color32::from_rgba_unmultiplied(20, 20, 24, 215)
-            } else {
-                Color32::from_white_alpha(235)
-            }
-        }
-        KbType::BlackRgb => {
-            if lvl > 0.05 {
-                glow(
-                    painter,
-                    r.expand(1.0),
-                    8,
-                    c,
-                    0.35 + 0.55 * lvl,
-                    4.0 + 14.0 * lvl,
-                );
-            }
-            painter.rect_filled(
-                r,
-                CornerRadius::same(7),
-                Color32::from_rgb(0x14, 0x14, 0x16),
-            );
-            painter.rect_filled(
-                face,
-                CornerRadius::same(5),
-                Color32::from_rgb(0x29, 0x29, 0x2e),
-            );
-            if lvl < 0.06 {
-                Color32::from_rgb(0x55, 0x55, 0x5d)
-            } else {
-                rgb32(c)
-            }
-        }
-        KbType::White => {
-            painter.rect_filled(
-                r,
-                CornerRadius::same(7),
-                Color32::from_rgb(0x14, 0x14, 0x16),
-            );
-            painter.rect_filled(
-                face,
-                CornerRadius::same(5),
-                Color32::from_rgb(0x29, 0x29, 0x2e),
-            );
-            if lvl < 0.06 {
-                Color32::from_rgb(0x55, 0x55, 0x5d)
-            } else {
-                rgb32(c)
-            }
-        }
-    };
-    // legends
-    let main = &k.def.main;
-    let long = main.chars().count() > 2 && r.width() > fs * 5.0;
-    let (anchor, x) = if long {
-        (Align2::LEFT_CENTER, face.left() + 6.0)
-    } else {
-        (Align2::CENTER_CENTER, face.center().x)
-    };
-    let cy = face.center().y;
-    if !k.def.top.is_empty() && r.height() >= fs * 2.6 {
-        painter.text(
-            Pos2::new(x, cy - fs * 0.6),
-            anchor,
-            &k.def.top,
-            FontId::proportional(fs * 0.78),
-            legend_color.gamma_multiply(0.8),
-        );
-        painter.text(
-            Pos2::new(x, cy + fs * 0.55),
-            anchor,
-            main,
-            FontId::proportional(fs),
-            legend_color,
-        );
-    } else {
-        let size = if r.height() < fs * 2.0 {
-            fs * 0.72
-        } else if main.chars().count() <= 2 {
-            fs * 1.12
-        } else {
-            fs * 0.82
-        };
-        painter.text(
-            Pos2::new(x, cy),
-            anchor,
-            main,
-            FontId::proportional(size),
-            legend_color,
-        );
-    }
-}
-
-/// Key under a screen position.
-pub fn key_at(keys: &[PlacedKey], pos: Pos2) -> Option<&PlacedKey> {
-    keys.iter().find(|k| k.rect.contains(pos))
 }

@@ -15,3 +15,8 @@ strip = true
 [profile.dev]
 # Agent sessions and local dev: less debug info = faster compile and link.
 debug = "line-tables-only"
+opt-level = 1
+
+# Keep debug builds usable: the keyboard picture is drawn 20 times a second
+[profile.dev.package."*"]
+opt-level = 2

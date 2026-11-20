@@ -60,6 +60,7 @@ pub enum ValueId {
     Clock = 0x0A,
     Paint = 0x0B,
     PaintCtrl = 0x0C,
+    Combos = 0x0D,
 }
 
 /// Painted keys: what PAINT_CTRL can do.
@@ -323,6 +324,109 @@ pub fn bootloader_request() -> Report {
     r[0] = 0x0B;
     r[1] = 0xFE;
     r
+}
+
+// ---------------------------------------------------------------------------
+// Keymap (VIA's own dynamic keymap commands, saved on the device)
+// ---------------------------------------------------------------------------
+
+pub const VIA_GET_KEYCODE: u8 = 0x04;
+pub const VIA_SET_KEYCODE: u8 = 0x05;
+pub const VIA_GET_BUFFER: u8 = 0x12;
+/// Keymap bytes per VIA buffer read (4 header bytes + 28).
+pub const KEYMAP_BYTES_PER_MSG: usize = 28;
+
+/// Reads `size` bytes of the keymap buffer starting at `offset`.
+pub fn keymap_buffer_request(offset: u16, size: u8) -> Report {
+    let mut r = [0u8; REPORT_LEN];
+    let o = offset.to_be_bytes();
+    r[..4].copy_from_slice(&[
+        VIA_GET_BUFFER,
+        o[0],
+        o[1],
+        size.min(KEYMAP_BYTES_PER_MSG as u8),
+    ]);
+    r
+}
+
+/// Requests that read the first `len` bytes of the keymap buffer.
+pub fn keymap_buffer_requests(len: usize) -> Vec<Report> {
+    (0..len)
+        .step_by(KEYMAP_BYTES_PER_MSG)
+        .map(|o| keymap_buffer_request(o as u16, (len - o).min(KEYMAP_BYTES_PER_MSG) as u8))
+        .collect()
+}
+
+/// The data part of a keymap buffer answer (its payload starts at byte 3 = size).
+pub fn parse_keymap_buffer(payload: &[u8]) -> &[u8] {
+    let n = (payload[0] as usize).min(KEYMAP_BYTES_PER_MSG);
+    &payload[1..1 + n]
+}
+
+pub fn set_keycode(layer: u8, row: u8, col: u8, code: u16) -> Report {
+    let mut r = [0u8; REPORT_LEN];
+    let c = code.to_be_bytes();
+    r[..6].copy_from_slice(&[VIA_SET_KEYCODE, layer, row, col, c[0], c[1]]);
+    r
+}
+
+// ---------------------------------------------------------------------------
+// Macropad corner combos
+// ---------------------------------------------------------------------------
+
+/// The macropad's two corner-key combos. An action of 0 means the built-in job
+/// (top: switch layer A/B, bottom: lighting controls).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Combos {
+    pub top_on: bool,
+    pub bottom_on: bool,
+    pub top_action: u16,
+    pub bottom_action: u16,
+    /// The top corner keys keep the active layer's color (cyan A, orange B).
+    pub corner_lights: bool,
+}
+
+impl Default for Combos {
+    fn default() -> Self {
+        Self {
+            top_on: true,
+            bottom_on: true,
+            top_action: 0,
+            bottom_action: 0,
+            corner_lights: false,
+        }
+    }
+}
+
+pub fn combos_request() -> Report {
+    get(ValueId::Combos, &[])
+}
+
+pub fn parse_combos(p: &[u8]) -> Combos {
+    Combos {
+        top_on: p[0] != 0,
+        bottom_on: p[1] != 0,
+        top_action: u16::from_be_bytes([p[2], p[3]]),
+        bottom_action: u16::from_be_bytes([p[4], p[5]]),
+        corner_lights: p[6] != 0,
+    }
+}
+
+pub fn set_combos(c: &Combos) -> Report {
+    let t = c.top_action.to_be_bytes();
+    let b = c.bottom_action.to_be_bytes();
+    set(
+        ValueId::Combos,
+        &[
+            c.top_on as u8,
+            c.bottom_on as u8,
+            t[0],
+            t[1],
+            b[0],
+            b[1],
+            c.corner_lights as u8,
+        ],
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -618,6 +722,25 @@ mod tests {
         p[0] = b'F';
         p[2] = 9;
         assert_eq!(parse_info(&p), Err(ProtocolError::VersionMismatch(9)));
+    }
+
+    #[test]
+    fn keymap_buffer_reads_cover_the_layers() {
+        let reqs = keymap_buffer_requests(4 * 256);
+        assert_eq!(reqs.len(), 37);
+        assert_eq!(&reqs[1][..4], &[0x12, 0, 28, 28]);
+        assert_eq!(reqs[36][3], (1024 - 36 * 28) as u8);
+        let r = set_keycode(1, 2, 3, 0x7E40);
+        assert_eq!(&r[..6], &[0x05, 1, 2, 3, 0x7E, 0x40]);
+        let c = Combos {
+            top_on: false,
+            bottom_on: true,
+            top_action: 0x0704,
+            bottom_action: 0,
+            corner_lights: true,
+        };
+        let r = set_combos(&c);
+        assert_eq!(parse_combos(&r[3..]), c);
     }
 
     #[test]

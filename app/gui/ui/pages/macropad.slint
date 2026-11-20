@@ -1,0 +1,34 @@
+// Macropad: switch layers and see what each key sends.
+import { Theme } from "../theme.slint";
+import { App } from "../state.slint";
+import { Card, Group, Hint, Body, RadioButton } from "../widgets.slint";
+import { Deck, OnOff } from "../parts.slint";
+
+export component MacropadPage inherits VerticalLayout {
+    spacing: 12px;
+    Deck { }
+    Card {
+        icon: @image-url("../icons/grid.svg");
+        title: "Active layer";
+        help: "Or press the two top corner keys of the macropad together.";
+        HorizontalLayout {
+            spacing: 16px;
+            RadioButton { text: "A: MIDI notes"; checked: App.layer == 0; clicked => { App.layer-chosen(0); } }
+            RadioButton { text: "B: F13–F24 keys"; checked: App.layer == 1; clicked => { App.layer-chosen(1); } }
+        }
+    }
+    Card {
+        icon: @image-url("../icons/target_arrow.svg");
+        title: "Layer color on the top corners";
+        help: App.combos-known ? "The two top corner keys stay cyan on layer A and orange on layer B. Off: they follow the effect, and the whole macropad flashes the layer color when you switch." : "Needs the latest macropad firmware (see the Firmware page).";
+        OnOff { checked: App.corner-lights; enabled: App.combos-known; toggled(v) => { App.corner-lights-toggled(v); } }
+    }
+    Group {
+        title: App.pad-key;
+        help: "Click a macropad key in the picture to see what it sends.";
+        HorizontalLayout { spacing: 12px; Body { text: "Layer A sends"; width: 120px; color: Theme.text2; } Body { text: App.pad-a; } }
+        HorizontalLayout { spacing: 12px; Body { text: "Layer B sends"; width: 120px; color: Theme.text2; } Body { text: App.pad-b; } }
+        Hint { text: App.pad-note; }
+    }
+    Hint { text: "Map the keys in Resolume under Shortcuts: MIDI for layer A, Keyboard for layer B. The full sheet is in resolume/MAPPING.md."; }
+}
