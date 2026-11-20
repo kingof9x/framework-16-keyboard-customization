@@ -2,11 +2,9 @@
 import { Theme } from "../theme.slint";
 import { App } from "../state.slint";
 import { Group, Hint, RadioButton } from "../widgets.slint";
-import { Deck } from "../parts.slint";
 
 export component SetupPage inherits VerticalLayout {
     spacing: 12px;
-    Deck { }
     Group {
         title: "Keyboard";
         help: "The app can't tell these apart, so pick yours.";

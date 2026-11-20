@@ -12,6 +12,7 @@ import { MacropadPage } from "pages/macropad.slint";
 import { SetupPage } from "pages/setup.slint";
 import { FirmwarePage } from "pages/firmware.slint";
 import { SettingsPage } from "pages/settings.slint";
+import { Deck } from "parts.slint";
 import { KeysPage } from "pages/keys.slint";
 
 export { Theme, App, DeviceRow, Legend, EffectItem, EffectGroup }
@@ -182,6 +183,17 @@ export component AppWindow inherits Window {
                 padding-bottom: 14px;
                 alignment: start;
                 Text { text: title-of(App.page); color: Theme.text; font-size: Theme.title; font-weight: 600; }
+            }
+            // The keyboard picture stays put above the page, so you can see what you change
+            // while the controls scroll underneath. Kept small (at most 760 px wide, about
+            // 240 px tall) so the controls get most of the window.
+            if App.page == "show" || App.page == "effects" || App.page == "keys" || App.page == "macropad" || App.page == "setup": Rectangle {
+                height: deck.height + 12px;
+                deck := Deck {
+                    width: min(parent.width - 12px, 760px);
+                    x: (parent.width - self.width) / 2;
+                    y: 0;
+                }
             }
             ScrollView {
                 vertical-stretch: 1;

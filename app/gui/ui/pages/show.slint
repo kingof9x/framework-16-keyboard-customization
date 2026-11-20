@@ -3,11 +3,10 @@ import { Button } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { App } from "../state.slint";
 import { Group, Hint, Body, Status, AccentButton, RadioButton, Switch } from "../widgets.slint";
-import { Deck, ColorPicker, SliderRow, EffectButtons } from "../parts.slint";
+import { ColorPicker, SliderRow, EffectButtons } from "../parts.slint";
 
 export component ShowPage inherits VerticalLayout {
     spacing: 12px;
-    Deck { }
     HorizontalLayout {
         spacing: 8px;
         Status { text: App.deck-caption; vertical-alignment: center; horizontal-stretch: 1; }
