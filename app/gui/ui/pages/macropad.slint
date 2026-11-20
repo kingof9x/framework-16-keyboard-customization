@@ -2,7 +2,7 @@
 import { Theme } from "../theme.slint";
 import { App } from "../state.slint";
 import { Card, Group, Hint, Body, RadioButton } from "../widgets.slint";
-import { Deck } from "../parts.slint";
+import { Deck, OnOff } from "../parts.slint";
 
 export component MacropadPage inherits VerticalLayout {
     spacing: 12px;
@@ -16,6 +16,12 @@ export component MacropadPage inherits VerticalLayout {
             RadioButton { text: "A: MIDI notes"; checked: App.layer == 0; clicked => { App.layer-chosen(0); } }
             RadioButton { text: "B: F13–F24 keys"; checked: App.layer == 1; clicked => { App.layer-chosen(1); } }
         }
+    }
+    Card {
+        icon: @image-url("../icons/target_arrow.svg");
+        title: "Layer color on the top corners";
+        help: App.combos-known ? "The two top corner keys stay cyan on layer A and orange on layer B. Off: they follow the effect, and the whole macropad flashes the layer color when you switch." : "Needs the latest macropad firmware (see the Firmware page).";
+        OnOff { checked: App.corner-lights; enabled: App.combos-known; toggled(v) => { App.corner-lights-toggled(v); } }
     }
     Group {
         title: App.pad-key;

@@ -12,6 +12,7 @@ import { MacropadPage } from "pages/macropad.slint";
 import { SetupPage } from "pages/setup.slint";
 import { FirmwarePage } from "pages/firmware.slint";
 import { SettingsPage } from "pages/settings.slint";
+import { KeysPage } from "pages/keys.slint";
 
 export { Theme, App, DeviceRow, Legend, EffectItem, EffectGroup }
 
@@ -94,6 +95,7 @@ component Logo inherits Rectangle {
 
 export component AppWindow inherits Window {
     title: App.title;
+    icon: @image-url("../assets/app.png");
     preferred-width: 1300px;
     preferred-height: 900px;
     min-width: 900px;
@@ -105,6 +107,7 @@ export component AppWindow inherits Window {
         { key: "home", label: "Home", icon: @image-url("icons/home.svg") },
         { key: "show", label: "Show", icon: @image-url("icons/sparkle.svg") },
         { key: "effects", label: "Effects", icon: @image-url("icons/dark_theme.svg") },
+        { key: "keys", label: "Keys", icon: @image-url("icons/key_edit.svg") },
         { key: "macropad", label: "Macropad", icon: @image-url("icons/grid.svg") },
         { key: "setup", label: "Your setup", icon: @image-url("icons/keyboard.svg") },
         { key: "firmware", label: "Firmware", icon: @image-url("icons/developer_board.svg") },
@@ -112,7 +115,7 @@ export component AppWindow inherits Window {
     ];
 
     function title-of(p: string) -> string {
-        return p == "home" ? "Home" : p == "show" ? "Show" : p == "effects" ? "Effects" : p == "macropad" ? "Macropad"
+        return p == "home" ? "Home" : p == "show" ? "Show" : p == "effects" ? "Effects" : p == "keys" ? "Keys" : p == "macropad" ? "Macropad"
             : p == "setup" ? "Your setup" : p == "firmware" ? "Firmware" : p == "settings" ? "Settings" : "";
     }
 
@@ -189,6 +192,7 @@ export component AppWindow inherits Window {
                     if App.page == "home": HomePage { }
                     if App.page == "show": ShowPage { }
                     if App.page == "effects": EffectsPage { }
+                    if App.page == "keys": KeysPage { }
                     if App.page == "macropad": MacropadPage { }
                     if App.page == "setup": SetupPage { }
                     if App.page == "firmware": FirmwarePage { }

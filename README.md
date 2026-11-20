@@ -22,7 +22,7 @@ the Windows app.
 * **Painted keys:** give any key its own color. Painted keys can still react
   to the running effect. They're saved on the device.
 * The app can read and set the effect, speed, brightness and color.
-* **Hotkey lock** (toggle in the app, remembered by the device): Fn + lighting
+* **Fn lighting keys off** (switch in the app, remembered by the device): Fn + lighting
   keys do nothing, so a stray key press can't change the lights during a show.
 * VIA and Framework's `qmk_hid` tool still work.
 
@@ -31,12 +31,16 @@ the Windows app.
 **Macropad** (details in [`resolume/MAPPING.md`](resolume/MAPPING.md))
 * **Layer A:** 24 MIDI notes (notes 48–71). The pad shows up as a USB MIDI device.
 * **Layer B:** F13–F24, Ctrl+F13–F20 and Shift+F13–F16.
-* Press the **two top corner keys together** to switch layers. The corners
-  glow cyan (A) or orange (B).
+* Press the **two top corner keys together** to switch layers. The whole pad
+  flashes cyan (A) or orange (B). The app can make the top corners keep that
+  color.
 * Press the **two bottom corner keys together** for the lighting controls
   overlay.
+* Each combo can be turned off or given another job in the app.
+* Brightness matches the keyboard's (Framework's firmware drives the macropad
+  LEDs harder).
 
-**App** (tabs: Show, Effects, Macropad, Firmware)
+**App** (Home, Show, Effects, Keys, Macropad, Your setup, Firmware, Settings)
 * A live picture of your keyboard and side module, lit with the same effect
   formulas the firmware uses. Nothing changes on the hardware until you press
   **Send to devices**.
@@ -46,8 +50,14 @@ the Windows app.
   with your own colors.
 * **Effects:** a separate effect for each device, or **Join into one device**.
   Full color picker (any color the LEDs can make), speed and brightness.
+* **Keys:** change what any keyboard or macropad key does (with or without
+  Fn), turn keys off, or make a key **open an app**. Changes are saved on the
+  device. Turn the Fn lighting keys off, and set up the macropad's corner
+  combos.
 * **Macropad:** switch layers and see what each key sends.
 * **Firmware:** restart a device into flashing mode.
+* **Settings:** look (follows Windows), keep running in the notification area,
+  start with Windows, and check for updates.
 * App-drawn effects (wave, rainbow sweep, keypress ripple), hotkey lock, and
   dark or light mode following Windows.
 
@@ -60,7 +70,17 @@ the Windows app.
 
 ## 1. Download the files
 
-The builds come from GitHub Actions:
+Easiest: open **Releases** on this repo's page and download from the newest
+release:
+* `framework-16-keyboard-control-<version>-setup.exe`: installs the app
+  (no administrator rights needed) with a Start menu entry.
+* `framework_ansi_f16custom.uf2` and `framework_macropad_f16custom.uf2`: the
+  firmware.
+
+The app checks for new releases by itself (Settings → Updates) and can
+download and install them.
+
+Test builds also come from GitHub Actions:
 
 1. Open this repo's **Actions** tab.
 2. Pick the latest green run of **Firmware**. At the bottom, under
@@ -70,10 +90,11 @@ The builds come from GitHub Actions:
 3. Unzip both. You get:
    * `framework_ansi_f16custom.uf2`: keyboard firmware
    * `framework_macropad_f16custom.uf2`: macropad firmware
-   * `framework-16-keyboard-control.exe`: the app
+   * `framework-16-keyboard-control.exe`: the app (also the installer in
+     `installer/`)
 
-If a version tag (for example `v0.1.0`) has been pushed, the same files are
-also attached to the matching page under **Releases**.
+Pushing a version tag (for example `v0.2.0`) publishes a release with all of
+these files.
 
 ## 2. Flash the firmware
 
@@ -115,9 +136,9 @@ is expected.
 
 ## 4. Use the app
 
-1. Double-click `framework-16-keyboard-control.exe`. The first time, Windows may say *"Windows
-   protected your PC"* because the app isn't signed. Click **More info → Run
-   anyway**.
+1. Run the installer, or double-click `framework-16-keyboard-control.exe`.
+   The first time, Windows may say *"Windows protected your PC"* because the
+   app isn't signed. Click **More info → Run anyway**.
 2. At the top, both devices should show **connected (f16custom firmware)**.
    *"found, but not running the f16custom firmware"* means you still need to
    flash that device.
@@ -135,11 +156,21 @@ is expected.
    * **Effects:** an effect, color, speed and brightness for each device.
      **Join into one device** makes one card drive both, running as one
      surface. **Copy to** copies one device's settings to the other.
+   * **Keys:** click a key in the picture, then pick **Framework default**,
+     **Nothing** (turned off), **A key** (with Ctrl, Shift, Alt or Super if you
+     like) or **Open an app** (pick the program). **Keyboard shows** switches
+     between what keys do on their own and with **Fn** held. Changed keys are
+     orange. The change is saved on the device straight away. Below: the
+     **Fn lighting keys** switch and the macropad's **corner combos** (turn
+     each off, or give it another job). **Reset all keys** goes back to
+     Framework's layout.
    * **Macropad:** switch layer A (MIDI) or B (F-keys); click a macropad key in
-     the picture to see what it sends.
+     the picture to see what it sends. **Layer color on the top corners**
+     keeps the corners cyan/orange; off, they follow the effect.
    * **Firmware:** restart a device into flashing mode.
-   * **Hotkey lock** (top right): Fn + lighting keys and the macropad's lighting
-     overlay do nothing until you switch it off again.
+   * **Settings:** the look, **Keep running when closed** (the app waits in
+     the notification area so Open an app keys work; right-click its icon to
+     quit), **Start with Windows**, and **Check for updates**.
 5. When you close the app, devices running an app-drawn effect go back to
    their saved effect. Built-in effects, joined surfaces and painted keys keep
    running without the app.
@@ -151,8 +182,15 @@ white.
 Try the app without the hardware: run `framework-16-keyboard-control.exe --demo` from a command
 prompt to use two pretend devices.
 
-The app needs no install and no admin rights. You can keep the `.exe`
-anywhere.
+The app needs no admin rights. Without the installer, you can keep the
+`.exe` anywhere.
+
+**Open an app keys** send Ctrl+Shift+Alt+F13 to F24. The app turns those into
+starting the program, so it must be running (in the notification area is
+enough). On another computer without the app those keys do nothing.
+
+**Macropad brightness:** if it still looks brighter or dimmer than the
+keyboard, use **Macropad brightness** on the Effects page.
 
 ## 5. Map the macropad in Resolume
 

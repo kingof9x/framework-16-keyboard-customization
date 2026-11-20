@@ -144,4 +144,72 @@ export global App {
     // 0 system, 1 light, 2 dark, 3 classic
     in-out property <int> theme-choice;
     callback theme-chosen(int);
+
+    // Keys: what each key does (saved on the device)
+    in-out property <int> keys-kb-view;     // 0 normal, 1 with Fn held
+    in-out property <int> keys-pad-view;    // 0 layer A, 1 layer B
+    in property <bool> key-selected;
+    in property <string> key-title;
+    in property <string> key-now;
+    in property <string> key-default;
+    in property <string> key-note;
+    in property <bool> key-editable;
+    in property <int> key-kind;             // 0 default, 1 nothing, 2 a key, 3 open an app
+    in property <[string]> key-choices;
+    in-out property <int> key-choice;
+    in property <bool> key-mods-ok;         // Ctrl/Shift/Alt/Super can be added
+    in-out property <bool> key-ctrl;
+    in-out property <bool> key-shift;
+    in-out property <bool> key-alt;
+    in-out property <bool> key-super;
+    in-out property <string> key-app;
+    in property <int> keys-changed;
+    in-out property <bool> confirm-reset;
+    callback keys-view-chosen(int, int);    // which (0 keyboard, 1 macropad), view
+    callback key-kind-chosen(int);
+    callback key-choice-chosen(int);
+    callback key-mod-toggled(int, bool);    // 0 ctrl, 1 shift, 2 alt, 3 super
+    callback key-app-edited(string);
+    callback key-app-browse();
+    callback keys-reset();
+
+    // Macropad corner combos
+    in property <bool> combos-known;        // the macropad answered (new enough firmware)
+    in property <bool> combo-top-on;
+    in property <bool> combo-bottom-on;
+    in property <[string]> combo-top-choices;
+    in property <[string]> combo-bottom-choices;
+    in-out property <int> combo-top-choice;
+    in-out property <int> combo-bottom-choice;
+    in property <bool> combo-top-app-shown;
+    in property <bool> combo-bottom-app-shown;
+    in-out property <string> combo-top-app;
+    in-out property <string> combo-bottom-app;
+    callback combo-toggled(int, bool);      // 0 top, 1 bottom
+    callback combo-choice-chosen(int, int);
+    callback combo-app-edited(int, string);
+    callback combo-app-browse(int);
+
+    // Running in the background
+    in property <bool> has-tray;
+    in property <bool> tray;
+    in property <bool> autostart;
+    callback tray-toggled(bool);
+    callback autostart-toggled(bool);
+
+    // Macropad: top corners keep the layer color; brightness balance (percent)
+    in property <bool> corner-lights;
+    callback corner-lights-toggled(bool);
+    in-out property <float> pad-balance: 100;
+    callback pad-balance-changed();
+
+    // Updates
+    in property <string> version;
+    in property <string> update-status;
+    in property <bool> update-available;
+    in property <bool> update-busy;
+    in property <bool> auto-update;
+    callback update-check();
+    callback update-install();
+    callback update-auto-toggled(bool);
 }

@@ -3,6 +3,7 @@
 
 use crate::deck::{Choice, Dev, KbType, Look, Setup};
 use f16_core::effects::LinkedEffect;
+use f16_core::keycodes::APP_SLOTS;
 use f16_core::keys::SideModule;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -19,6 +20,23 @@ pub struct Saved {
     pub paint: HashMap<(Dev, usize), (u8, u8)>,
     /// The window's look: "system", "light", "dark" or "classic".
     pub theme: String,
+    /// Program each "Open an app" key starts (empty = not set).
+    pub apps: Vec<String>,
+    /// Closing the window keeps the app running in the notification area.
+    pub tray: bool,
+    /// Start with Windows. None = not chosen yet: on once an "Open an app" key is set up.
+    pub autostart: Option<bool>,
+    /// Macropad brightness compared to the keyboard's, in percent (50 to 150).
+    pub pad_balance: u8,
+    /// Look for a newer version when the app starts.
+    pub auto_update: bool,
+}
+
+impl Saved {
+    pub fn autostart_on(&self) -> bool {
+        self.autostart
+            .unwrap_or_else(|| self.apps.iter().any(|a| !a.is_empty()))
+    }
 }
 
 impl Default for Saved {
@@ -40,6 +58,11 @@ impl Default for Saved {
             brush: (128, 255),
             paint: HashMap::new(),
             theme: "system".into(),
+            apps: vec![String::new(); APP_SLOTS],
+            tray: true,
+            autostart: None,
+            pad_balance: 100,
+            auto_update: true,
         }
     }
 }
@@ -138,7 +161,18 @@ pub fn to_text(s: &Saved) -> String {
         s.brush.0,
         s.brush.1
     );
-    out += &format!("theme={}\n", s.theme);
+    out += &format!(
+        "theme={}\ntray={}\npad-balance={}\nauto-update={}\n",
+        s.theme, s.tray, s.pad_balance, s.auto_update
+    );
+    if let Some(a) = s.autostart {
+        out += &format!("autostart={a}\n");
+    }
+    for (i, a) in s.apps.iter().enumerate() {
+        if !a.is_empty() {
+            out += &format!("app={} {a}\n", i + 1);
+        }
+    }
     let mut keys: Vec<_> = s.paint.iter().collect();
     keys.sort();
     for ((dev, i), (h, sat)) in keys {
@@ -179,6 +213,23 @@ pub fn from_text(text: &str) -> Saved {
             "follow" => s.follow = v != "false",
             "join" => s.join = v == "true",
             "theme" if crate::theme::CHOICES.contains(&v) => s.theme = v.to_string(),
+            "tray" => s.tray = v != "false",
+            "auto-update" => s.auto_update = v != "false",
+            "pad-balance" => {
+                if let Ok(b) = v.parse::<u8>() {
+                    s.pad_balance = b.clamp(50, 150);
+                }
+            }
+            "autostart" => s.autostart = Some(v == "true"),
+            "app" => {
+                if let Some((n, path)) = v.split_once(' ') {
+                    if let Some(slot) = n.parse::<usize>().ok().and_then(|n| n.checked_sub(1)) {
+                        if slot < APP_SLOTS {
+                            s.apps[slot] = path.trim().to_string();
+                        }
+                    }
+                }
+            }
             "show" => s.show = parse_look(v).unwrap_or(s.show),
             "kb" => s.kb = parse_look(v).unwrap_or(s.kb),
             "module" => s.module = parse_look(v).unwrap_or(s.module),
@@ -247,6 +298,10 @@ mod tests {
         s.kb.choice = Choice::PaintOnly;
         s.paint.insert((Dev::Keyboard, 30), (128, 255));
         s.paint.insert((Dev::Module, 3), (0, 0));
+        s.apps[2] = r"C:\Program Files\Resolume Arena\Arena.exe".into();
+        s.tray = false;
+        s.autostart = Some(false);
+        s.pad_balance = 70;
         assert_eq!(from_text(&to_text(&s)), s);
     }
 

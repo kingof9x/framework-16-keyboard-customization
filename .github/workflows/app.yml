@@ -42,10 +42,23 @@ jobs:
       - name: Build release exe
         run: cargo build --release --locked
 
+      - name: Build installer (Inno Setup)
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+          }
+          & $iscc "/DAppVersion=$version" installer\installer.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - uses: actions/upload-artifact@v4
         with:
           name: framework-16-keyboard-control-windows
-          path: app/target/release/framework-16-keyboard-control.exe
+          path: |
+            app/target/release/framework-16-keyboard-control.exe
+            app/target/installer/*-setup.exe
           if-no-files-found: error
 
   release:
@@ -61,4 +74,6 @@ jobs:
           name: framework-16-keyboard-control-windows
       - uses: softprops/action-gh-release@v2
         with:
-          files: framework-16-keyboard-control.exe
+          files: |
+            **/framework-16-keyboard-control.exe
+            **/*-setup.exe

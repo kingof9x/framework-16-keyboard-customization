@@ -5,6 +5,8 @@
 
 pub mod builtin;
 pub mod effects;
+pub mod keycodes;
+mod keymap_data;
 pub mod keys;
 pub mod layout;
 pub mod protocol;

@@ -8,10 +8,16 @@ slint::include_modules!();
 mod deck;
 mod device;
 mod engine;
+mod keyedit;
 mod render;
 mod settings;
 mod sim;
 mod theme;
+mod update;
+mod winsys;
+
+/// The notification-area icon (and so "keep running when closed") exists on Windows only.
+pub const HAS_TRAY: bool = cfg!(windows);
 
 use deck::{Choice, Dev, KbType, Look, PlacedKey, Preview, Scene};
 use engine::{Command, EngineHandle, Slot, Status};
@@ -23,6 +29,7 @@ use settings::Saved;
 use slint::{Color, ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 /// Built-in effects grouped for the Show page.
@@ -38,8 +45,14 @@ const GROUPS: &[(&str, &[u8])] = &[
     ),
 ];
 
-struct State {
+pub struct State {
     engine: EngineHandle,
+    bg: winsys::Background,
+    ke: keyedit::KeyEdit,
+    /// A newer release found on GitHub.
+    update: Option<update::Release>,
+    /// Answers from the update thread, picked up by `tick`.
+    update_inbox: Arc<Mutex<Option<UpdateMsg>>>,
     s: Saved,
     last_saved: Saved,
     preview: Preview,
@@ -57,6 +70,78 @@ struct State {
     last_theme_check: Instant,
     status: Status,
     legends: Rc<VecModel<Legend>>,
+}
+
+enum UpdateMsg {
+    Checked(Result<Option<update::Release>, String>),
+    Downloaded(Result<std::path::PathBuf, String>),
+}
+
+impl State {
+    fn check_for_update(&mut self, app: &AppWindow) {
+        app.global::<App>().set_update_busy(true);
+        let inbox = self.update_inbox.clone();
+        std::thread::spawn(move || {
+            *inbox.lock().unwrap() = Some(UpdateMsg::Checked(update::check()));
+        });
+    }
+
+    fn install_update(&mut self, app: &AppWindow) {
+        let Some(r) = self.update.clone() else { return };
+        let g = app.global::<App>();
+        match r.installer {
+            Some(url) => {
+                g.set_update_busy(true);
+                g.set_update_status(format!("Downloading version {}…", r.version).into());
+                let inbox = self.update_inbox.clone();
+                std::thread::spawn(move || {
+                    *inbox.lock().unwrap() = Some(UpdateMsg::Downloaded(update::download(&url)));
+                });
+            }
+            None => {
+                if !winsys::open(&r.page) {
+                    g.set_update_status(format!("Download it from {}", r.page).into());
+                }
+            }
+        }
+    }
+
+    /// Handles what the update thread found.
+    fn update_answers(&mut self, app: &AppWindow) {
+        let Some(msg) = self.update_inbox.lock().unwrap().take() else {
+            return;
+        };
+        let g = app.global::<App>();
+        g.set_update_busy(false);
+        match msg {
+            UpdateMsg::Checked(Ok(Some(r))) => {
+                g.set_update_status(
+                    format!(
+                        "Version {} is available.",
+                        r.version.trim_start_matches('v')
+                    )
+                    .into(),
+                );
+                g.set_update_available(true);
+                self.update = Some(r);
+            }
+            UpdateMsg::Checked(Ok(None)) => {
+                g.set_update_status("You have the latest version.".into());
+                g.set_update_available(false);
+            }
+            UpdateMsg::Checked(Err(e)) | UpdateMsg::Downloaded(Err(e)) => {
+                g.set_update_status(e.into());
+            }
+            UpdateMsg::Downloaded(Ok(path)) => {
+                if winsys::open(&path.to_string_lossy()) {
+                    // The installer replaces the app, so get out of its way.
+                    let _ = slint::quit_event_loop();
+                } else {
+                    g.set_update_status(format!("Installer saved to {}", path.display()).into());
+                }
+            }
+        }
+    }
 }
 
 fn color(c: [u8; 3]) -> Color {
@@ -108,7 +193,8 @@ impl State {
     // Sending to the devices
     // ---------------------------------------------------------------------
 
-    fn state_for(look: &Look, d: &engine::DeviceStatus) -> LightState {
+    /// `balance`: brightness in percent of the chosen one (the macropad's balance setting).
+    fn state_for(look: &Look, d: &engine::DeviceStatus, balance: u8) -> LightState {
         let mode = match look.choice {
             Choice::Builtin(id) => id,
             _ => d.info.paint_only_effect,
@@ -118,7 +204,7 @@ impl State {
             mode,
             hue: look.hue,
             sat: look.sat,
-            val: look.val,
+            val: (look.val as u32 * balance as u32 / 100).min(255) as u8,
             speed: look.speed,
         }
     }
@@ -176,7 +262,15 @@ impl State {
                 if let (Some(d), true) = (ready(&status, kind), self.send_to[n]) {
                     self.engine.send(Command::SetState {
                         kind,
-                        state: Self::state_for(&look, d),
+                        state: Self::state_for(
+                            &look,
+                            d,
+                            if kind == DeviceKind::Macropad {
+                                self.s.pad_balance
+                            } else {
+                                100
+                            },
+                        ),
                         save,
                     });
                 }
@@ -247,7 +341,11 @@ impl State {
             follow: self.s.follow,
             macropad_layer: self.layer(),
             show_paint_marks: show,
-            selected_module_key: (page == "macropad").then_some(self.pad_key),
+            selected: match page {
+                "macropad" => Some((Dev::Module, self.pad_key)),
+                "keys" => self.ke.sel,
+                _ => None,
+            },
         }
     }
 }
@@ -295,6 +393,7 @@ fn push_all(app: &AppWindow, st: &State) {
     g.set_mod_sat(s.module.sat as i32);
     g.set_mod_val(s.module.val as i32);
     g.set_mod_speed(s.module.speed as i32);
+    g.set_pad_balance(s.pad_balance as f32);
     g.set_theme_choice(
         theme::CHOICES
             .iter()
@@ -511,6 +610,7 @@ fn apply_theme(app: &AppWindow, st: &State) {
 
 fn tick(app: &AppWindow, st: &mut State) {
     let g = app.global::<App>();
+    st.update_answers(app);
     st.status = st.engine.status.lock().unwrap().clone();
     let status = st.status.clone();
 
@@ -615,14 +715,27 @@ fn tick(app: &AppWindow, st: &mut State) {
 
     // The keyboard picture, on the pages that show it
     let page = g.get_page().to_string();
-    if matches!(page.as_str(), "show" | "effects" | "macropad" | "setup") {
+    if matches!(page.as_str(), "keys" | "home" | "macropad") {
+        keyedit::push(app, st);
+    }
+    let visible = app.window().is_visible();
+    if visible
+        && matches!(
+            page.as_str(),
+            "show" | "effects" | "macropad" | "setup" | "keys"
+        )
+    {
         let scale = app.window().scale_factor();
         let width = ((g.get_deck_width() * scale).round() as u32).clamp(300, 1400);
         let mut preview = std::mem::take(&mut st.preview);
         let scene = st.scene(&page);
-        let placed = deck::place_keys(&scene.setup, scene.macropad_layer);
+        let mut placed = deck::place_keys(&scene.setup, scene.macropad_layer);
         let shell = deck::shell(&scene.setup);
-        let colors = preview.colors(&scene, &placed);
+        let colors = if page == "keys" {
+            keyedit::decorate(st, &mut placed)
+        } else {
+            preview.colors(&scene, &placed)
+        };
         let accent = g_accent(app);
         let pic = render::draw(&scene, &placed, &colors, &shell, width, accent);
         let typing = preview.typing(&scene);
@@ -669,11 +782,16 @@ fn tick(app: &AppWindow, st: &mut State) {
             st.legends.set_vec(legends);
         }
         let mut caption = vec!["Preview".to_string()];
-        caption.push(if joined {
-            "joined: one surface".into()
-        } else {
-            "separate devices".into()
-        });
+        if page == "keys" {
+            caption = vec!["Orange keys are changed from the Framework default".to_string()];
+        }
+        if page != "keys" {
+            caption.push(if joined {
+                "joined: one surface".into()
+            } else {
+                "separate devices".into()
+            });
+        }
         if typing {
             caption.push("pretend typing on".into());
         }
@@ -703,8 +821,27 @@ fn main() -> Result<(), slint::PlatformError> {
         demo,
     );
     let s = settings::load();
+    // The hotkey and tray thread talks to the window through the event loop.
+    let bg = {
+        let weak = app.as_weak();
+        winsys::Background::start(move |e| {
+            let _ = weak.upgrade_in_event_loop(move |app| match e {
+                winsys::TrayEvent::Open => {
+                    let _ = app.show();
+                    app.window().set_minimized(false);
+                }
+                winsys::TrayEvent::Quit => {
+                    let _ = slint::quit_event_loop();
+                }
+            });
+        })
+    };
     let st = Rc::new(RefCell::new(State {
         engine,
+        bg,
+        ke: keyedit::KeyEdit::default(),
+        update: None,
+        update_inbox: Arc::new(Mutex::new(None)),
         last_saved: s.clone(),
         s,
         preview: Preview::default(),
@@ -724,9 +861,18 @@ fn main() -> Result<(), slint::PlatformError> {
     }));
     effect_models(&app);
     {
-        let st = st.borrow();
+        let mut st = st.borrow_mut();
         apply_theme(&app, &st);
         push_all(&app, &st);
+        st.sync_background();
+        keyedit::push(&app, &mut st);
+        let g = app.global::<App>();
+        g.set_version(update::CURRENT.into());
+        g.set_auto_update(st.s.auto_update);
+        g.set_update_status("".into());
+        if st.s.auto_update {
+            st.check_for_update(&app);
+        }
     }
     let g = app.global::<App>();
     g.set_legends(ModelRc::from(st.borrow().legends.clone()));
@@ -825,6 +971,10 @@ fn main() -> Result<(), slint::PlatformError> {
                 st.pad_key = k.index;
                 push_derived(&app, st);
             }
+            "keys" if kind == 0 => {
+                keyedit::select(st, k.dev, k.index);
+                keyedit::push(&app, st);
+            }
             _ => {}
         }
     });
@@ -850,6 +1000,84 @@ fn main() -> Result<(), slint::PlatformError> {
             *v = on;
         }
     });
+    // Keys page
+    on!(on_keys_view_chosen, |app, st, which: i32, view: i32| {
+        keyedit::view_chosen(st, which, view);
+        keyedit::push(&app, st);
+    });
+    on!(on_key_kind_chosen, |app, st, kind: i32| {
+        keyedit::kind_chosen(st, kind);
+        keyedit::push(&app, st);
+    });
+    on!(on_key_choice_chosen, |app, st, i: i32| {
+        keyedit::choice_chosen(st, i);
+        keyedit::push(&app, st);
+    });
+    on!(on_key_mod_toggled, |app, st, which: i32, on: bool| {
+        keyedit::mod_toggled(st, which, on);
+        keyedit::push(&app, st);
+    });
+    on!(on_key_app_edited, |_app, st, path: SharedString| {
+        keyedit::app_edited(st, &path);
+    });
+    on!(on_key_app_browse, |app, st| {
+        keyedit::app_browse(st);
+        keyedit::push(&app, st);
+    });
+    on!(on_keys_reset, |app, st| {
+        keyedit::reset_all(st);
+        keyedit::push(&app, st);
+    });
+    on!(on_combo_toggled, |app, st, which: i32, on: bool| {
+        keyedit::combo_toggled(st, which, on);
+        keyedit::push(&app, st);
+    });
+    on!(on_combo_choice_chosen, |app, st, which: i32, i: i32| {
+        keyedit::combo_chosen(st, which, i);
+        keyedit::push(&app, st);
+    });
+    on!(
+        on_combo_app_edited,
+        |_app, st, which: i32, path: SharedString| {
+            keyedit::combo_app_edited(st, which, &path);
+        }
+    );
+    on!(on_combo_app_browse, |app, st, which: i32| {
+        keyedit::combo_app_browse(st, which);
+        keyedit::push(&app, st);
+    });
+    on!(on_tray_toggled, |app, st, on: bool| {
+        st.s.tray = on;
+        st.sync_background();
+        keyedit::push(&app, st);
+    });
+    on!(on_autostart_toggled, |app, st, on: bool| {
+        st.s.autostart = Some(on);
+        st.sync_background();
+        keyedit::push(&app, st);
+    });
+
+    on!(on_update_check, |app, st| {
+        st.check_for_update(&app);
+    });
+    on!(on_update_install, |app, st| {
+        st.install_update(&app);
+    });
+    on!(on_update_auto_toggled, |app, st, on: bool| {
+        st.s.auto_update = on;
+        app.global::<App>().set_auto_update(on);
+    });
+    on!(on_corner_lights_toggled, |app, st, on: bool| {
+        keyedit::corner_lights_toggled(st, on);
+        keyedit::push(&app, st);
+    });
+    on!(on_pad_balance_changed, |app, st| {
+        let v = app.global::<App>().get_pad_balance();
+        st.s.pad_balance = (v.round() as i32).clamp(50, 150) as u8;
+        pull_all(&app, st);
+        st.send_effects(false);
+    });
+
     on!(on_theme_chosen, |app, st, i: i32| {
         st.s.theme = theme::CHOICES
             .get(i as usize)
@@ -876,7 +1104,25 @@ fn main() -> Result<(), slint::PlatformError> {
             },
         );
     }
-    app.run()?;
+    // Closing the window: stay in the notification area, or quit.
+    {
+        let st = st.clone();
+        app.window().on_close_requested(move || {
+            let tray = st.try_borrow().map(|s| s.s.tray).unwrap_or(false);
+            if !(tray && HAS_TRAY) {
+                let _ = slint::quit_event_loop();
+            }
+            slint::CloseRequestResponse::HideWindow
+        });
+    }
+    // Started by Windows at sign-in: begin in the notification area.
+    let hidden = HAS_TRAY && st.borrow().s.tray && std::env::args().any(|a| a == "--tray");
+    if !hidden {
+        app.show()?;
+    }
+    slint::run_event_loop_until_quit()?;
+    app.hide()?;
+    st.borrow().bg.close();
     // Hand the lights back to the devices' saved effects (EngineHandle's Drop does the rest).
     drop(timer);
     Ok(())

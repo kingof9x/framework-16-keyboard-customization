@@ -1,7 +1,9 @@
 // Settings: the window's look, like White Rabbit's.
 import { Theme } from "../theme.slint";
 import { App } from "../state.slint";
-import { Group, RadioButton } from "../widgets.slint";
+import { Button } from "std-widgets.slint";
+import { Group, RadioButton, Card, Hint, AccentButton } from "../widgets.slint";
+import { OnOff } from "../parts.slint";
 
 export component SettingsPage inherits VerticalLayout {
     spacing: 12px;
@@ -12,5 +14,33 @@ export component SettingsPage inherits VerticalLayout {
         RadioButton { text: "Light"; checked: App.theme-choice == 1; clicked => { App.theme-chosen(1); } }
         RadioButton { text: "Dark"; checked: App.theme-choice == 2; clicked => { App.theme-chosen(2); } }
         RadioButton { text: "Classic"; checked: App.theme-choice == 3; clicked => { App.theme-chosen(3); } }
+    }
+    if App.has-tray: Card {
+        icon: @image-url("../icons/arrow_swap.svg");
+        title: "Keep running when closed";
+        help: "Closing the window leaves the app in the notification area, so Open an app keys keep working. Right-click its icon to quit.";
+        OnOff { checked: App.tray; toggled(v) => { App.tray-toggled(v); } }
+    }
+    if App.has-tray: Card {
+        icon: @image-url("../icons/home.svg");
+        title: "Start with Windows";
+        help: "Starts the app in the notification area when you sign in, so Open an app keys work right away.";
+        OnOff { checked: App.autostart; toggled(v) => { App.autostart-toggled(v); } }
+    }
+    Group {
+        title: "Updates";
+        help: "Version " + App.version + ". " + App.update-status;
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: start;
+            Button { text: App.update-busy ? "Checking…" : "Check for updates"; enabled: !App.update-busy; clicked => { App.update-check(); } }
+            if App.update-available: AccentButton { text: "Download and install"; enabled: !App.update-busy; clicked => { App.update-install(); } }
+        }
+        HorizontalLayout {
+            spacing: 12px;
+            Text { color: Theme.text; vertical-alignment: center; horizontal-stretch: 1; text: "Check when the app starts"; }
+            OnOff { checked: App.auto-update; toggled(v) => { App.update-auto-toggled(v); } }
+        }
+        Hint { text: "New firmware for the keyboard and macropad comes with each release too: the Firmware page explains how to install it."; }
     }
 }

@@ -12,10 +12,13 @@ component Link inherits Card {
 
 export component HomePage inherits VerticalLayout {
     spacing: 4px;
+    if App.update-available: Link { key: "settings"; icon: @image-url("../icons/info.svg"); title: "Update available"; help: App.update-status; }
     SectionTitle { text: "Lights"; }
     Link { key: "show"; icon: @image-url("../icons/sparkle.svg"); title: "Show";
         help: "Try any effect across the keyboard and side module, and paint keys with your own colors."; }
     Link { key: "effects"; icon: @image-url("../icons/dark_theme.svg"); title: "Effects"; help: App.effects-summary; }
+    Link { key: "keys"; icon: @image-url("../icons/key_edit.svg"); title: "Keys";
+        help: App.keys-changed == 0 ? "Change what any key does, turn keys off, or make a key open an app." : App.keys-changed == 1 ? "1 key changed from the Framework default." : App.keys-changed + " keys changed from the Framework default."; }
     if App.has-module: Card {
         icon: @image-url("../icons/arrow_swap.svg");
         title: "Join into one device";
@@ -24,9 +27,9 @@ export component HomePage inherits VerticalLayout {
     }
     Card {
         icon: @image-url("../icons/target_arrow.svg");
-        title: "Hotkey lock";
-        help: "Fn + lighting keys and the macropad's lighting controls do nothing, so the lights can't change by accident.";
-        OnOff { checked: App.hotkey-lock; toggled(v) => { App.lock-toggled(v); } }
+        title: "Fn lighting keys";
+        help: "Fn + lighting keys and the macropad's lighting controls. Turn them off so the lights can't change by accident.";
+        OnOff { checked: !App.hotkey-lock; toggled(v) => { App.lock-toggled(!v); } }
     }
     Rectangle { height: 14px; }
     SectionTitle { text: "Hardware"; }

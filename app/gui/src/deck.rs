@@ -124,7 +124,8 @@ pub struct Scene<'a> {
     pub follow: bool,
     pub macropad_layer: u8,
     pub show_paint_marks: bool,
-    pub selected_module_key: Option<usize>,
+    /// The key drawn with an accent outline (Macropad and Keys pages).
+    pub selected: Option<(Dev, usize)>,
 }
 
 /// A rectangle in deck key units.

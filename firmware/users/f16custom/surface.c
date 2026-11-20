@@ -142,6 +142,32 @@ void surface_config_write(uint32_t config) {
     eeconfig_update_user_datablock(&s);
 }
 
+#if RGB_MATRIX_LED_COUNT + SURFACE_EXTRA_SLOTS <= HOSTFX_PAINT_MAX_LEDS
+void surface_extra_get(uint8_t slot, uint8_t out[3]) {
+    memcpy(out, paint.led[HOSTFX_PAINT_MAX_LEDS - 1 - slot], 3);
+}
+
+// Saved right away, without saving unsaved painting.
+void surface_extra_set(uint8_t slot, const uint8_t v[3]) {
+    uint8_t idx = HOSTFX_PAINT_MAX_LEDS - 1 - slot;
+    memcpy(paint.led[idx], v, 3);
+    store_t s;
+    eeconfig_read_user_datablock(&s);
+    if (s.version != PAINT_VERSION) {
+        memset(&s, 0, sizeof(s));
+        s.version = PAINT_VERSION;
+        s.follow  = 1;
+    }
+    memcpy(s.led[idx], v, 3);
+    eeconfig_update_user_datablock(&s);
+}
+#else
+void surface_extra_get(uint8_t slot, uint8_t out[3]) {
+    memset(out, 0, 3);
+}
+void surface_extra_set(uint8_t slot, const uint8_t v[3]) {}
+#endif
+
 void surface_paint_get(uint8_t *d) {
     uint8_t start = d[0], n = 0;
     for (uint8_t i = 0; i < HOSTFX_PAINT_PER_GET_MSG && start + i < RGB_MATRIX_LED_COUNT; i++, n++) {

@@ -286,7 +286,7 @@ pub fn draw(
                 );
             }
         }
-        if k.dev == crate::deck::Dev::Module && scene.selected_module_key == Some(k.index) {
+        if scene.selected == Some((k.dev, k.index)) {
             if let Some(path) = rrect(x + 1.0, y + 1.0, w - 2.0, h - 2.0, radius, [true; 4]) {
                 let stroke = Stroke {
                     width: 2.5,
@@ -375,7 +375,7 @@ mod tests {
             follow: true,
             macropad_layer: 0,
             show_paint_marks: true,
-            selected_module_key: Some(0),
+            selected: Some((crate::deck::Dev::Module, 0)),
         }
     }
 

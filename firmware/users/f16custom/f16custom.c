@@ -64,6 +64,12 @@ __attribute__((weak)) uint8_t hostfx_get_layer(void) {
 __attribute__((weak)) bool hostfx_set_layer(uint8_t layer) {
     return false;
 }
+__attribute__((weak)) bool hostfx_combos_get(uint8_t *d) {
+    return false;
+}
+__attribute__((weak)) bool hostfx_combos_set(const uint8_t *d) {
+    return false;
+}
 
 // ---------------------------------------------------------------------------
 // Hotkey lock (EEPROM)
@@ -166,7 +172,8 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
 // Raw HID (VIA custom channel 0)
 // ---------------------------------------------------------------------------
 
-static void handle_get(uint8_t value_id, uint8_t *d) {
+// Returns false when the value is not supported.
+static bool handle_get(uint8_t value_id, uint8_t *d) {
     // d points at byte 3 of the report: 29 bytes of payload
     switch (value_id) {
         case HOSTFX_INFO:
@@ -232,9 +239,12 @@ static void handle_get(uint8_t value_id, uint8_t *d) {
         case HOSTFX_PAINT_CTRL:
             surface_paint_ctrl_get(d);
             break;
+        case HOSTFX_COMBOS:
+            return hostfx_combos_get(d);
         default:
             break;
     }
+    return true;
 }
 
 static bool handle_set(uint8_t value_id, uint8_t *d) {
@@ -292,6 +302,8 @@ static bool handle_set(uint8_t value_id, uint8_t *d) {
             return surface_paint_set(d);
         case HOSTFX_PAINT_CTRL:
             return surface_paint_ctrl(d[0]);
+        case HOSTFX_COMBOS:
+            return hostfx_combos_set(d);
         default:
             return false;
     }
@@ -312,7 +324,7 @@ void via_custom_value_command_kb(uint8_t *data, uint8_t length) {
     }
     switch (*command_id) {
         case id_custom_get_value:
-            handle_get(value_id, payload);
+            if (!handle_get(value_id, payload)) *command_id = id_unhandled;
             break;
         case id_custom_set_value:
             if (!handle_set(value_id, payload)) *command_id = id_unhandled;

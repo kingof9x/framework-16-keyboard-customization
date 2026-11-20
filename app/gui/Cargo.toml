@@ -26,14 +26,21 @@ tiny-skia = { version = "0.11", default-features = false, features = ["std", "si
 
 # Pure-Rust HID backend on Windows: no C compiler or driver install needed.
 [target.'cfg(windows)'.dependencies]
+# Checks GitHub for a newer release, over Windows' own TLS (no C compiler needed)
+ureq = { version = "2", default-features = false, features = ["native-tls"] }
+native-tls = "0.2"
 hidapi = { version = "2.6", default-features = false, features = ["windows-native"] }
 raw-window-handle = "0.6"
 windows-sys = { version = "0.60", features = [
     "Win32_Foundation",
     "Win32_Graphics_Dwm",
     "Win32_Graphics_Gdi",
+    "Win32_System_LibraryLoader",
     "Win32_System_Registry",
     "Win32_UI_Accessibility",
+    "Win32_UI_Controls_Dialogs",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
 ] }
 
@@ -42,3 +49,5 @@ hidapi = "2.6"
 
 [build-dependencies]
 slint-build = "1.18"
+# Puts the icon into the .exe (Windows / MSVC builds)
+embed-resource = "3"

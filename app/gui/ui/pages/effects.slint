@@ -2,7 +2,7 @@
 import { Button, ComboBox } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { App } from "../state.slint";
-import { Card, Group, Hint, Body, Status, AccentButton } from "../widgets.slint";
+import { Card, Group, Hint, Body, Status, AccentButton, Slider } from "../widgets.slint";
 import { Deck, ColorPicker, SliderRow, OnOff } from "../parts.slint";
 
 // Effect, color, speed and brightness for one device (or both, joined).
@@ -110,6 +110,24 @@ export component EffectsPage inherits VerticalLayout {
         if App.kb-rgb && App.mod-rgb: HorizontalLayout {
             alignment: start;
             Button { text: "Copy to Keyboard"; clicked => { App.copy-settings(1); } }
+        }
+    }
+    if App.side == 1: Card {
+        icon: @image-url("../icons/target_arrow.svg");
+        title: "Macropad brightness";
+        help: "If the macropad looks brighter or dimmer than the keyboard at the same setting, even it out here. Applied when you send.";
+        HorizontalLayout {
+            spacing: 10px;
+            width: 300px;
+            Slider {
+                horizontal-stretch: 1;
+                minimum: 50;
+                maximum: 150;
+                step: 5;
+                value <=> App.pad-balance;
+                released => { App.pad-balance-changed(); }
+            }
+            Body { text: round(App.pad-balance) + "%"; width: 44px; vertical-alignment: center; horizontal-alignment: right; }
         }
     }
     Hint { text: "Built-in effects run on the devices themselves, even when the app is closed. Nothing changes until you press Send to devices."; }

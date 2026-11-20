@@ -37,6 +37,7 @@ firmware).
 | `0A` | CLOCK | – | `ms` (u32, little endian): sets the effect clock; sent to both joined devices back to back |
 | `0B` | PAINT | request `start`; answer `start count (hue sat on)×count` (max 9) | `start count (hue sat on)×count` (max 8) |
 | `0C` | PAINT_CTRL | `follow count` | `op`: 0 clear, 1 save to EEPROM, 2 follow off, 3 follow on, 4 forget unsaved changes |
+| `0D` | COMBOS | `top_on bottom_on top_action(u16 BE) bottom_action(u16 BE) corner_lights` | same (saved). Macropad only; the keyboard answers `FF` |
 
 Notes:
 
@@ -54,6 +55,22 @@ Notes:
   back from the LED driver's frame buffer), with a floor of 30%. Painted keys,
   the follow flag, the hotkey lock and the span are stored in the EEPROM user
   datablock (390 bytes).
+* **Macropad combos:** the two corner combos match on key *position* (QMK's
+  `COMBO_ONLY_FROM_LAYER`, using Framework's factory layer), so they keep
+  working after the corner keys are changed. An action of 0 is the built-in job
+  (top: switch layer A/B, bottom: lighting overlay); any other value is a key
+  code that is tapped. `corner_lights` makes the top corners keep the layer
+  color (cyan A, orange B). These live in spare bytes at the end of the paint
+  store, which the macropad's 24 LEDs leave unused.
+* **Keys:** the app changes keys with VIA's own dynamic keymap commands
+  (`0x04` get keycode, `0x05` set keycode, `0x12` read the keymap buffer), so
+  changes are saved on the device and VIA sees them too. On the keyboard the
+  app keeps the Fn lock layers in step: a top-row change for "normal" also goes
+  to layer 3, and one for "with Fn" to layer 2. "Open an app" keys send
+  Ctrl+Shift+Alt+F13 to F24, which the Windows app catches.
+* **Macropad brightness:** Framework sets the macropad's LED driver to a higher
+  global current than the keyboard's (185 vs 104), so it looked brighter at the
+  same setting. The f16custom macropad firmware sets 104 to match.
 * Effect ids with Framework's v0.3.1 list: 1–44 built-in, 45 PC controlled
   (host driven), 46 off with painted keys only.
 * If no FRAME arrives for 3 seconds while host mode is on, the device returns to
