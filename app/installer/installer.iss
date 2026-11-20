@@ -1,6 +1,6 @@
 ; Installer for Framework 16 Keyboard Control (Inno Setup 6).
 ; Built in CI (.github/workflows/app.yml):
-;   iscc /DAppVersion=0.2.0 app\installer\installer.iss
+;   iscc /DAppVersion=1.0.0 app\installer\installer.iss
 ; Installs for the current user only, so no administrator prompt is needed.
 
 #define AppName "Framework 16 Keyboard Control"

@@ -1144,7 +1144,7 @@ dependencies = [
 
 [[package]]
 name = "f16-core"
-version = "0.2.0"
+version = "0.1.0"
 
 [[package]]
 name = "fastrand"
@@ -1316,7 +1316,7 @@ dependencies = [
 
 [[package]]
 name = "framework-16-keyboard-control"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "embed-resource",
  "f16-core",
