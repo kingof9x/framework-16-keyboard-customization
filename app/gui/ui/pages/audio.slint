@@ -50,7 +50,14 @@ export component AudioPage inherits VerticalLayout {
                 }
             }
         }
-        if App.audio-on && App.audio-level < 0.01: Hint { text: "No sound heard. Check that something is playing, or pick another input above."; }
+        // Always there (empty while sound is heard), so the page doesn't jump as the music
+        // goes quiet and loud again
+        Hint {
+            height: 18px;
+            overflow: elide;
+            wrap: no-wrap;
+            text: App.audio-on && App.audio-level < 0.01 ? "No sound heard. Check that something is playing, or pick another input above." : "";
+        }
     }
     Group {
         title: "Show";
