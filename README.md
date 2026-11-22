@@ -58,7 +58,8 @@ can be turned off in the app.
   **tint**: the effect's colors shifted by the painted color), and sliders to
   **match the brightness** of the keyboard and macropad.
 * **Audio:** light shows that follow the music the PC plays (spectrum bars,
-  centre out, level meter, beat pulse, bass ripples, color wash, strobe),
+  centre out, level meter, beat pulse, bass ripples, color wash, strobe, and
+  **Typing**: only the keys you press light up, in a color the music picks),
   across the keyboard and side module as one surface. **F12 + ↑** (or
   Ctrl+Alt+Shift+M, White Rabbit's shortcut) turns it on and off (switch it off in
   the Audio page if you like). The sound is measured with White Rabbit's own
