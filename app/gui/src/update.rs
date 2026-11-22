@@ -128,18 +128,56 @@ pub fn check() -> Result<Option<Release>, String> {
     Ok(is_newer(&release.version, CURRENT).then_some(release))
 }
 
-/// Downloads the installer into the temp folder and returns where it is.
+/// The download link of the release file called `file`, if the release has one.
+pub fn asset_url(body: &str, file: &str) -> Option<String> {
+    let end = format!("/{file}");
+    json_strings(body, "browser_download_url")
+        .into_iter()
+        .find(|u| u.ends_with(&end))
+}
+
 #[cfg(windows)]
-pub fn download(url: &str) -> Result<PathBuf, String> {
+fn fetch(url: &str, limit: u64) -> Result<Vec<u8>, String> {
     let resp = agent()?
         .get(url)
         .call()
         .map_err(|e| format!("Download failed: {e}"))?;
     let mut data = Vec::new();
     resp.into_reader()
-        .take(200 * 1024 * 1024)
+        .take(limit)
         .read_to_end(&mut data)
         .map_err(|e| format!("Download failed: {e}"))?;
+    Ok(data)
+}
+
+/// The newest release's version and its file called `file` (for example a device's firmware).
+#[cfg(windows)]
+pub fn latest_asset(file: &str) -> Result<(String, Vec<u8>), String> {
+    let body = agent()?
+        .get(LATEST)
+        .set("Accept", "application/vnd.github+json")
+        .call()
+        .map_err(|e| match e {
+            ureq::Error::Status(404, _) => "No releases published yet.".to_string(),
+            e => format!("Could not reach GitHub: {e}"),
+        })?
+        .into_string()
+        .map_err(|e| format!("Could not read GitHub's answer: {e}"))?;
+    let release = parse_release(&body).ok_or("GitHub's answer had no version in it.")?;
+    let url = asset_url(&body, file)
+        .ok_or_else(|| format!("Release {} has no {file} in it.", release.version))?;
+    Ok((release.version, fetch(&url, 16 * 1024 * 1024)?))
+}
+
+#[cfg(not(windows))]
+pub fn latest_asset(_file: &str) -> Result<(String, Vec<u8>), String> {
+    Err("Firmware is downloaded in the Windows app.".into())
+}
+
+/// Downloads the installer into the temp folder and returns where it is.
+#[cfg(windows)]
+pub fn download(url: &str) -> Result<PathBuf, String> {
+    let data = fetch(url, 200 * 1024 * 1024)?;
     let name = url
         .rsplit('/')
         .next()
@@ -185,6 +223,16 @@ mod tests {
         assert_eq!(
             r.installer.as_deref(),
             Some("https://e/framework-16-keyboard-control-0.2.0-setup.exe")
+        );
+        assert_eq!(
+            asset_url(body, "framework_ansi_f16custom.uf2"),
+            None,
+            "only a link that ends with the exact file name counts"
+        );
+        let body = body.replace("a.uf2", "framework_ansi_f16custom.uf2");
+        assert_eq!(
+            asset_url(&body, "framework_ansi_f16custom.uf2").as_deref(),
+            Some("https://e/framework_ansi_f16custom.uf2")
         );
     }
 }

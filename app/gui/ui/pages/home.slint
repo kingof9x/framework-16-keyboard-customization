@@ -38,6 +38,6 @@ export component HomePage inherits VerticalLayout {
     if App.side == 1: Link { key: "macropad"; icon: @image-url("../icons/grid.svg"); title: "Macropad";
         help: App.layer == 0 ? "Layer A: MIDI notes. Switch layers and see what each key sends." : "Layer B: numpad. Switch layers and see what each key sends."; }
     Link { key: "firmware"; icon: @image-url("../icons/developer_board.svg"); title: "Firmware";
-        help: "Restart the keyboard or macropad into flashing mode to install new firmware."; }
+        help: "Update the keyboard or macropad firmware from here."; }
     if App.status != "": Status { text: App.status; }
 }

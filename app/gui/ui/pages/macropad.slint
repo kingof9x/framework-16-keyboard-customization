@@ -19,7 +19,7 @@ export component MacropadPage inherits VerticalLayout {
     Card {
         icon: @image-url("../icons/target_arrow.svg");
         title: "Layer color on the top corners";
-        help: App.combos-known ? "The two top corner keys stay cyan on layer A and orange on layer B. Off: they follow the effect, and the whole macropad flashes the layer color when you switch." : "Needs the latest macropad firmware (see the Firmware page).";
+        help: App.combos-known ? "The two top corner keys stay cyan on layer A and orange on layer B. Off: they follow the effect, and the whole macropad flashes the layer color when you switch." : "Needs the latest macropad firmware: update it on the Firmware page.";
         OnOff { checked: App.corner-lights; enabled: App.combos-known; toggled(v) => { App.corner-lights-toggled(v); } }
     }
     Group {

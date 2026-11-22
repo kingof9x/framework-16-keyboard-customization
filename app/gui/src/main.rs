@@ -9,6 +9,7 @@ mod audio_src;
 mod deck;
 mod device;
 mod engine;
+mod flash;
 mod keyedit;
 mod render;
 mod settings;
@@ -55,6 +56,19 @@ pub struct State {
     update: Option<update::Release>,
     /// Answers from the update thread, picked up by `tick`.
     update_inbox: Arc<Mutex<Option<UpdateMsg>>>,
+    /// Firmware update in progress (which device), and what its thread reports.
+    flashing: Option<DeviceKind>,
+    flash_inbox: Arc<Mutex<Vec<flash::Progress>>>,
+    /// Keys the user changed, saved before a firmware update (new firmware resets the keymap)
+    /// and put back once the device is back: device, the keys, when the update finished.
+    restore_keys: Option<(
+        DeviceKind,
+        Vec<f16_core::keycodes::KeyWrite>,
+        Option<Instant>,
+    )>,
+    /// When the Firmware page last looked for a device waiting in flashing mode.
+    last_drive_scan: Instant,
+    demo: bool,
     s: Saved,
     last_saved: Saved,
     preview: Preview,
@@ -121,6 +135,116 @@ impl State {
                 if !winsys::open(&r.page) {
                     g.set_update_status(format!("Download it from {}", r.page).into());
                 }
+            }
+        }
+    }
+
+    /// Starts a firmware update of device `which` (0 keyboard, 1 macropad) on its own thread.
+    fn start_flash(
+        &mut self,
+        app: &AppWindow,
+        which: i32,
+        source: flash::Source,
+        target: flash::Target,
+    ) {
+        if self.flashing.is_some() {
+            return;
+        }
+        let kind = if which == 0 {
+            DeviceKind::Keyboard
+        } else {
+            DeviceKind::Macropad
+        };
+        self.flashing = Some(kind);
+        // (A device already in flashing mode has no keymap to save: keep what an earlier,
+        // unfinished update saved.)
+        if let Some(d) = ready(&self.status, kind) {
+            self.restore_keys = d
+                .keymap
+                .as_ref()
+                .map(|km| km.changes())
+                .filter(|w| !w.is_empty())
+                .map(|w| (kind, w, None));
+        }
+        let g = app.global::<App>();
+        g.set_flash_which(which);
+        g.set_flash_busy(true);
+        g.set_flash_failed(false);
+        g.set_flash_status("Starting…".into());
+        let inbox = self.flash_inbox.clone();
+        let tx = self.engine.tx.clone();
+        let demo = self.demo;
+        let wake = app.as_weak();
+        std::thread::spawn(move || {
+            flash::run(
+                kind,
+                source,
+                target,
+                demo,
+                || {
+                    let _ = tx.send(Command::Bootloader(kind, true));
+                },
+                |p| {
+                    inbox.lock().unwrap().push(p);
+                    let _ = wake.upgrade_in_event_loop(|_| {});
+                },
+            );
+        });
+    }
+
+    /// Shows what the firmware update thread reports, and looks for devices waiting in
+    /// flashing mode while the Firmware page is open.
+    fn flash_answers(&mut self, app: &AppWindow) {
+        let g = app.global::<App>();
+        let msgs: Vec<_> = self.flash_inbox.lock().unwrap().drain(..).collect();
+        for m in msgs {
+            let (failed, s) = match m {
+                flash::Progress::Step(s) => {
+                    g.set_flash_status(s.into());
+                    continue;
+                }
+                flash::Progress::Done(s) => (false, s),
+                flash::Progress::Failed(s) => (true, s),
+            };
+            if let Some(r) = self.restore_keys.as_mut().filter(|_| !failed) {
+                r.2 = Some(Instant::now());
+            }
+            g.set_flash_status(s.into());
+            g.set_flash_failed(failed);
+            g.set_flash_busy(false);
+            self.flashing = None;
+            self.last_drive_scan = Instant::now() - Duration::from_secs(60);
+            // Pick the device up again (and its new features) straight away.
+            self.engine.send(Command::Rescan);
+        }
+        // Put the user's key changes back once the updated device is back.
+        if let Some((kind, writes, Some(done))) = &self.restore_keys {
+            let (kind, done) = (*kind, *done);
+            if ready(&self.status, kind).is_some_and(|d| d.keymap.is_some()) {
+                let n = writes.len();
+                let writes = self.restore_keys.take().unwrap().1;
+                self.engine.send(Command::SetKeys { kind, writes });
+                let msg = format!(
+                    "{} Your remapped keys were put back ({n} key setting{}).",
+                    g.get_flash_status(),
+                    if n == 1 { "" } else { "s" }
+                );
+                g.set_flash_status(msg.into());
+            } else if done.elapsed() > Duration::from_secs(90) {
+                self.restore_keys = None;
+            }
+        }
+        if g.get_page() == "firmware"
+            && self.flashing.is_none()
+            && self.last_drive_scan.elapsed() > Duration::from_secs(2)
+        {
+            self.last_drive_scan = Instant::now();
+            let drive = flash::waiting_drives()
+                .first()
+                .map(|d| flash::drive_name(d))
+                .unwrap_or_default();
+            if g.get_waiting_drive() != drive.as_str() {
+                g.set_waiting_drive(drive.into());
             }
         }
     }
@@ -710,6 +834,7 @@ fn apply_theme(app: &AppWindow, st: &State) {
 fn tick(app: &AppWindow, st: &mut State) {
     let g = app.global::<App>();
     st.update_answers(app);
+    st.flash_answers(app);
     st.status = st.engine.status.lock().unwrap().clone();
     let status = st.status.clone();
 
@@ -1161,6 +1286,11 @@ fn main() -> Result<(), slint::PlatformError> {
         ke: keyedit::KeyEdit::default(),
         update: None,
         update_inbox: Arc::new(Mutex::new(None)),
+        flashing: None,
+        flash_inbox: Arc::new(Mutex::new(vec![])),
+        restore_keys: None,
+        last_drive_scan: Instant::now() - Duration::from_secs(60),
+        demo,
         last_saved: s.clone(),
         s,
         preview: Preview::default(),
@@ -1349,11 +1479,39 @@ fn main() -> Result<(), slint::PlatformError> {
         st.engine.send(Command::SetHotkeyLock(on));
     });
     on!(on_bootloader, |_app, st, which: i32| {
-        st.engine.send(Command::Bootloader(if which == 0 {
-            DeviceKind::Keyboard
-        } else {
-            DeviceKind::Macropad
-        }));
+        st.engine.send(Command::Bootloader(
+            if which == 0 {
+                DeviceKind::Keyboard
+            } else {
+                DeviceKind::Macropad
+            },
+            false,
+        ));
+    });
+    on!(on_flash_latest, |app, st, which: i32| {
+        st.start_flash(&app, which, flash::Source::Latest, flash::Target::Running);
+    });
+    on!(on_flash_file, |app, st, which: i32| {
+        if let Some(p) = winsys::browse_for_firmware() {
+            st.start_flash(
+                &app,
+                which,
+                flash::Source::File(p.into()),
+                flash::Target::Running,
+            );
+        }
+    });
+    on!(on_flash_waiting, |app, st, which: i32| {
+        let Some(drive) = flash::waiting_drives().into_iter().next() else {
+            app.global::<App>().set_waiting_drive("".into());
+            return;
+        };
+        st.start_flash(
+            &app,
+            which,
+            flash::Source::Latest,
+            flash::Target::Drive(drive),
+        );
     });
     on!(on_rescan, |_app, st| {
         st.engine.send(Command::Rescan);

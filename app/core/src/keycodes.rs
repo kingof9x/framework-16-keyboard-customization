@@ -289,6 +289,21 @@ impl Keymap {
         out
     }
 
+    /// Writes that set every changed key (on every layer) to what it is now: a copy of the
+    /// user's changes, to put back after something resets the keymap.
+    pub fn changes(&self) -> Vec<KeyWrite> {
+        let mut out = vec![];
+        for (l, layer) in self.layers.iter().enumerate() {
+            for (k, &code) in layer.iter().enumerate() {
+                if code != self.board.default_code(l as u8, k) {
+                    let (r, c) = self.board.matrix()[k];
+                    out.push((l as u8, r, c, code));
+                }
+            }
+        }
+        out
+    }
+
     pub fn apply(&mut self, writes: &[KeyWrite]) {
         for &(l, r, c, code) in writes {
             if let Some(k) = self.board.matrix().iter().position(|&p| p == (r, c)) {
@@ -316,6 +331,19 @@ impl Keymap {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn changes_come_back_after_a_reset() {
+        let mut km = Keymap::defaults(Board::Keyboard);
+        assert!(km.changes().is_empty());
+        let w = km.writes(1, 12, Some(app_code(0)));
+        km.apply(&w);
+        let saved = km.changes();
+        assert_eq!(saved.len(), 2, "Fn + F12 lives on two layers");
+        let mut fresh = Keymap::defaults(Board::Keyboard);
+        fresh.apply(&saved);
+        assert_eq!(fresh, km);
+    }
     use crate::keys::{keyboard_keys, macropad_keys};
 
     #[test]

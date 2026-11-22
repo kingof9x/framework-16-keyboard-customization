@@ -44,6 +44,10 @@ mod stub {
         None
     }
 
+    pub fn browse_for_firmware() -> Option<String> {
+        None
+    }
+
     pub fn open(_what: &str) -> bool {
         false
     }
@@ -526,11 +530,24 @@ mod imp {
 
     /// Windows' Open dialog, for picking the program an "Open an app" key starts.
     pub fn browse_for_app() -> Option<String> {
+        browse(
+            "Programs\0*.exe;*.lnk;*.bat;*.cmd\0All files\0*.*\0\0",
+            "Pick the program this key opens",
+        )
+    }
+
+    pub fn browse_for_firmware() -> Option<String> {
+        browse(
+            "Firmware (.uf2)\0*.uf2\0All files\0*.*\0\0",
+            "Pick the firmware file",
+        )
+    }
+
+    /// The Windows "Open" dialog; `filter` is its double-NUL-ended filter list.
+    fn browse(filter: &str, title: &str) -> Option<String> {
         let mut buf = vec![0u16; 1024];
-        let filter: Vec<u16> = "Programs\0*.exe;*.lnk;*.bat;*.cmd\0All files\0*.*\0\0"
-            .encode_utf16()
-            .collect();
-        let title = wide("Pick the program this key opens");
+        let filter: Vec<u16> = filter.encode_utf16().collect();
+        let title = wide(title);
         let mut ofn: OPENFILENAMEW = unsafe { std::mem::zeroed() };
         ofn.lStructSize = std::mem::size_of::<OPENFILENAMEW>() as u32;
         ofn.lpstrFilter = filter.as_ptr();

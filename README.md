@@ -69,7 +69,9 @@ can be turned off in the app.
   device. Turn the Fn lighting keys off, and set up the macropad's corner
   combos.
 * **Macropad:** switch layers and see what each key sends.
-* **Firmware:** restart a device into flashing mode.
+* **Firmware:** update a device's firmware from the app (downloads the latest
+  release from GitHub, or uses a `.uf2` file you pick), or restart it into
+  flashing mode to flash by hand.
 * **Settings:** look (follows Windows), keep running in the notification area,
   start with Windows, and check for updates.
 * App-drawn effects (wave, rainbow sweep, keypress ripple), hotkey lock, and
@@ -114,7 +116,16 @@ does the same.
 
 ## 2. Flash the firmware
 
-Each device must first restart into **flashing mode**. In that mode a USB
+**Easiest: from the app.** Open `framework-16-keyboard-control.exe` →
+**Firmware** → **Update firmware** next to the keyboard (or macropad) → *Yes,
+update it*. The app downloads the latest release's firmware for that device,
+checks it is the right file, restarts the device into flashing mode, copies the
+file onto it and waits for it to come back (about 20 seconds). *Use a .uf2
+file…* does the same with a file on your PC. Key remaps made in the app are
+saved first and put back afterwards. If a device is already sitting in
+flashing mode, the Firmware page offers to put firmware on it.
+
+**By hand:** each device must first restart into **flashing mode**. In that mode a USB
 drive called **RPI-RP2** appears in File Explorer. While a device is in
 flashing mode it doesn't type, so use the touchpad (and an external keyboard
 if you need one).
@@ -137,8 +148,9 @@ flashing mode* (or macropad) → confirm.
    firmware. This takes about 5 seconds. Don't unplug it during the copy.
 3. Do the other device the same way.
 
-Flashing resets the device's saved settings (lighting, VIA key changes). That
-is expected.
+Flashing by hand can reset the device's saved settings (lighting, key
+changes): new firmware resets the keymap. That is expected. (*Update firmware*
+in the app puts your remapped keys back for you.)
 
 ## 3. Go back to Framework's official firmware
 
