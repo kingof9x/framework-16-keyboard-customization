@@ -17,17 +17,33 @@ pub struct Listener {
 
 impl Listener {
     /// `sensitivity`: 1 (quiet music shows little) to 10 (everything shows a lot), 5 = normal.
-    pub fn start(demo: bool, sensitivity: u8) -> Result<Self, String> {
+    /// `microphone`: listen to a microphone (`device`, "" = the default one) instead of what the
+    /// PC plays.
+    pub fn start(
+        demo: bool,
+        sensitivity: u8,
+        microphone: bool,
+        device: &str,
+    ) -> Result<Self, String> {
+        let mode = if microphone {
+            InputMode::Microphone
+        } else {
+            InputMode::Playback
+        };
         let capture = if demo {
             None
         } else {
-            Some(capture::acquire(InputMode::Playback, "", None)?)
+            Some(capture::acquire(
+                mode,
+                if microphone { device } else { "" },
+                None,
+            )?)
         };
         Ok(Self {
             capture,
             analyzer: Analyzer::new(
                 BANDS,
-                InputMode::Playback,
+                mode,
                 sensitivity.clamp(1, 10) as i64,
                 true,
                 1.0,
@@ -76,6 +92,11 @@ impl Drop for Listener {
             capture::release(c);
         }
     }
+}
+
+/// The microphones (and other recording inputs) this PC has. Slow: call it off the window's thread.
+pub fn microphones() -> Vec<String> {
+    capture::list_microphones()
 }
 
 /// A made-up song at 120 beats a minute: kick drum, a wandering melody and hi-hats.

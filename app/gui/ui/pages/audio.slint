@@ -2,6 +2,7 @@
 // module. Ctrl+Alt+Shift+M (the same as White Rabbit's) turns it on and off.
 import { Theme } from "../theme.slint";
 import { App } from "../state.slint";
+import { Button, ComboBox } from "std-widgets.slint";
 import { Card, Group, Hint, Body, RadioButton, Status } from "../widgets.slint";
 import { OnOff, SliderRow } from "../parts.slint";
 
@@ -12,6 +13,44 @@ export component AudioPage inherits VerticalLayout {
         title: "Audio reactivity";
         help: App.audio-status;
         OnOff { checked: App.audio-on; toggled(v) => { App.audio-toggled(v); } }
+    }
+    Group {
+        title: "Listen to";
+        help: "Like in White Rabbit: the sound the PC is playing, or a microphone.";
+        HorizontalLayout {
+            spacing: 16px;
+            alignment: start;
+            RadioButton { text: "What the PC is playing"; checked: App.audio-input == 0; clicked => { App.audio-input-chosen(0); } }
+            RadioButton { text: "A microphone"; checked: App.audio-input == 1; clicked => { App.audio-input-chosen(1); } }
+        }
+        if App.audio-input == 1: HorizontalLayout {
+            spacing: 8px;
+            padding-left: 30px;
+            ComboBox {
+                horizontal-stretch: 1;
+                model: App.audio-devices;
+                current-index <=> App.audio-device;
+                selected => { App.audio-device-chosen(self.current-index); }
+            }
+            Button { text: "Look again"; clicked => { App.audio-devices-refresh(); } }
+        }
+        HorizontalLayout {
+            spacing: 12px;
+            Body { text: "Sound now"; width: 96px; vertical-alignment: center; }
+            Rectangle {
+                height: 10px;
+                horizontal-stretch: 1;
+                border-radius: 5px;
+                background: Theme.control-border;
+                Rectangle {
+                    x: 0;
+                    width: parent.width * clamp(App.audio-level * 1.5, 0, 1);
+                    border-radius: 5px;
+                    background: Theme.accent;
+                }
+            }
+        }
+        if App.audio-on && App.audio-level < 0.01: Hint { text: "No sound heard. Check that something is playing, or pick another input above."; }
     }
     Group {
         title: "Show";

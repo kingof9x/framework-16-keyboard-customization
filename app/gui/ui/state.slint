@@ -246,6 +246,15 @@ export global App {
     callback audio-toggled(bool);
     callback audio-changed();
     callback audio-hotkey-toggled(bool);
+    // What audio mode listens to: 0 what the PC plays, 1 a microphone (from audio-devices)
+    in property <int> audio-input;
+    in property <[string]> audio-devices;  // index 0 = "Default microphone"
+    in-out property <int> audio-device;
+    callback audio-input-chosen(int);
+    callback audio-device-chosen(int);
+    callback audio-devices-refresh();
+    // How loud the sound is right now, 0..1
+    in property <float> audio-level;
     // Ctrl+Alt+Shift+M (from the shortcut watcher)
     callback audio-shortcut();
 
