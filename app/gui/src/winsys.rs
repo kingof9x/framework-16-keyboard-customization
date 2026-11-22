@@ -48,6 +48,12 @@ mod stub {
         None
     }
 
+    pub fn already_running() -> bool {
+        false
+    }
+
+    pub fn bring_to_front(_app: &crate::AppWindow) {}
+
     pub fn open(_what: &str) -> bool {
         false
     }
@@ -82,7 +88,10 @@ mod imp {
     const WM_TRAY: u32 = WM_APP + 1;
     const WM_SYNC: u32 = WM_APP + 2;
     const WM_AUDIO_HOTKEY: u32 = WM_APP + 3;
+    /// "Show the window": sent by a second copy of the app as it starts (it then quits).
+    const WM_SHOW_APP: u32 = WM_APP + 4;
     const VK_M: u32 = 0x4D;
+    const CLASS_NAME: &str = "F16KeyboardControlTray";
 
     /// Where the keyboard hook posts the shortcut (the hidden window), and whether M is down.
     static HOOK_HWND: AtomicIsize = AtomicIsize::new(0);
@@ -174,7 +183,7 @@ mod imp {
     ) {
         unsafe {
             let hinst = GetModuleHandleW(std::ptr::null());
-            let class = wide("F16KeyboardControlTray");
+            let class = wide(CLASS_NAME);
             let wc = WNDCLASSW {
                 lpfnWndProc: Some(wndproc),
                 hInstance: hinst,
@@ -308,6 +317,53 @@ mod imp {
         });
     }
 
+    /// Whether `path` is this program's own .exe.
+    fn is_this_app(path: &str) -> bool {
+        std::env::current_exe().is_ok_and(|exe| exe.to_string_lossy().eq_ignore_ascii_case(path))
+    }
+
+    /// True when another copy of the app is already running. That copy is asked to show its
+    /// window, and this one should quit (two copies would fight over the devices).
+    pub fn already_running() -> bool {
+        use windows_sys::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS};
+        use windows_sys::Win32::System::Threading::CreateMutexW;
+        let name = wide("Local\\Framework16KeyboardControl");
+        // The mutex lives as long as this process (its handle is never closed).
+        let mutex = unsafe { CreateMutexW(std::ptr::null(), 0, name.as_ptr()) };
+        if mutex.is_null() || unsafe { GetLastError() } != ERROR_ALREADY_EXISTS {
+            return false;
+        }
+        let class = wide(CLASS_NAME);
+        unsafe {
+            let other = FindWindowW(class.as_ptr(), std::ptr::null());
+            if !other.is_null() {
+                // Let the other copy come to the front (this one was just started by the user).
+                AllowSetForegroundWindow(ASFW_ANY);
+                PostMessageW(other, WM_SHOW_APP, 0, 0);
+            }
+        }
+        true
+    }
+
+    /// Puts the window in front of the others (after a key or a second copy asked for it).
+    pub fn bring_to_front(app: &crate::AppWindow) {
+        use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+        use slint::ComponentHandle;
+        let wh = app.window().window_handle();
+        let Ok(handle) = wh.window_handle() else {
+            return;
+        };
+        if let RawWindowHandle::Win32(h) = handle.as_raw() {
+            let hwnd = h.hwnd.get() as HWND;
+            unsafe {
+                if IsIconic(hwnd) != 0 {
+                    ShowWindow(hwnd, SW_RESTORE);
+                }
+                SetForegroundWindow(hwnd);
+            }
+        }
+    }
+
     /// Opens a program, file or web page the way Explorer would.
     pub fn open(what: &str) -> bool {
         launch(what);
@@ -339,6 +395,10 @@ mod imp {
                 send(TrayEvent::AudioHotkey);
                 0
             }
+            WM_SHOW_APP => {
+                send(TrayEvent::Open);
+                0
+            }
             WM_HOTKEY => {
                 let slot = wp.wrapping_sub(1);
                 let path = STATE.with(|s| {
@@ -348,7 +408,10 @@ mod imp {
                         .unwrap_or_default()
                 });
                 let path = path.trim().trim_matches('"');
-                if !path.is_empty() {
+                if is_this_app(path) {
+                    // This app is already running: show its window rather than start a copy.
+                    send(TrayEvent::Open);
+                } else if !path.is_empty() {
                     launch(path);
                 }
                 0

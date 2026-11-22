@@ -1251,9 +1251,13 @@ fn g_accent(app: &AppWindow) -> [u8; 3] {
 }
 
 fn main() -> Result<(), slint::PlatformError> {
-    let app = AppWindow::new()?;
     // `framework-16-keyboard-control.exe --demo` shows pretend devices (no hardware needed)
     let demo = std::env::args().any(|a| a == "--demo");
+    // Already running (for example in the notification area): that copy shows its window.
+    if !demo && winsys::already_running() {
+        return Ok(());
+    }
+    let app = AppWindow::new()?;
     let weak = app.as_weak();
     let engine = engine::start(
         move || {
@@ -1270,6 +1274,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 winsys::TrayEvent::Open => {
                     let _ = app.show();
                     app.window().set_minimized(false);
+                    winsys::bring_to_front(&app);
                 }
                 winsys::TrayEvent::Quit => {
                     let _ = slint::quit_event_loop();
@@ -1347,6 +1352,11 @@ fn main() -> Result<(), slint::PlatformError> {
         st.find_microphones();
         let g = app.global::<App>();
         g.set_version(update::CURRENT.into());
+        if cfg!(windows) {
+            if let Ok(exe) = std::env::current_exe() {
+                g.set_this_app_path(exe.to_string_lossy().to_string().into());
+            }
+        }
         g.set_auto_update(st.s.auto_update);
         g.set_update_status("".into());
         if st.s.auto_update {
