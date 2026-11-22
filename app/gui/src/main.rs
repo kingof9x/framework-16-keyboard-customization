@@ -22,6 +22,7 @@ pub const HAS_TRAY: bool = cfg!(windows);
 
 use deck::{Choice, Dev, KbType, Look, PlacedKey, Preview, Scene};
 use engine::{Command, EngineHandle, Slot, Status};
+use f16_core::audio::AudioColors;
 use f16_core::builtin::qmk_hsv;
 use f16_core::effects::LinkedEffect;
 use f16_core::keys::{self, SideModule, KEYBOARD_SIZE, MODULE_GRID};
@@ -336,6 +337,7 @@ impl State {
             sensitivity: self.s.audio_sensitivity,
             microphone: self.s.audio_mic,
             device: self.s.audio_device.clone(),
+            colors: self.s.audio_colors,
         }
     }
 
@@ -1021,6 +1023,28 @@ fn tick(app: &AppWindow, st: &mut State) {
     }
 }
 
+/// Audio mode's colors into the Audio page.
+fn push_audio_colors(app: &AppWindow, st: &State) {
+    let g = app.global::<App>();
+    let (i, h, s) = match st.s.audio_colors {
+        AudioColors::Auto => (0, None, None),
+        AudioColors::Rainbow => (1, None, None),
+        AudioColors::Meter => (2, None, None),
+        AudioColors::Fire => (3, None, None),
+        AudioColors::Ocean => (4, None, None),
+        AudioColors::One(h, s) => (5, Some(h), Some(s)),
+    };
+    g.set_audio_colors(i);
+    if let (Some(h), Some(s)) = (h, s) {
+        g.set_audio_hue((h * 255.0).round() as i32);
+        g.set_audio_sat((s * 255.0).round() as i32);
+    }
+    let (h, s) = (g.get_audio_hue(), g.get_audio_sat());
+    g.set_audio_full(color(qmk_hsv(h, 255, 255)));
+    g.set_audio_picked(color(qmk_hsv(h, s, 255)));
+    g.set_audio_hex(hex(qmk_hsv(h, s, 255)));
+}
+
 /// The microphone list and the chosen one, into the Audio page.
 fn push_mics(app: &AppWindow, st: &State) {
     let g = app.global::<App>();
@@ -1182,6 +1206,7 @@ fn main() -> Result<(), slint::PlatformError> {
         st.sync_background();
         keyedit::push(&app, &mut st);
         push_mics(&app, &st);
+        push_audio_colors(&app, &st);
         st.find_microphones();
         let g = app.global::<App>();
         g.set_version(update::CURRENT.into());
@@ -1493,6 +1518,23 @@ fn main() -> Result<(), slint::PlatformError> {
     });
     on!(on_audio_devices_refresh, |_app, st| {
         st.find_microphones();
+    });
+    on!(on_audio_colors_changed, |app, st| {
+        let g = app.global::<App>();
+        let (h, s) = (
+            g.get_audio_hue().clamp(0, 255),
+            g.get_audio_sat().clamp(0, 255),
+        );
+        st.s.audio_colors = match g.get_audio_colors() {
+            1 => AudioColors::Rainbow,
+            2 => AudioColors::Meter,
+            3 => AudioColors::Fire,
+            4 => AudioColors::Ocean,
+            5 => AudioColors::One(h as f32 / 255.0, s as f32 / 255.0),
+            _ => AudioColors::Auto,
+        };
+        push_audio_colors(&app, st);
+        st.audio_settings_changed();
     });
     on!(on_audio_hotkey_toggled, |app, st, on: bool| {
         st.s.audio_hotkey = on;

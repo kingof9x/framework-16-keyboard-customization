@@ -4,7 +4,7 @@
 use crate::audio_src::Listener;
 use crate::device::{self, Device, Found};
 use crate::sim::SimPort;
-use f16_core::audio::{AudioLook, AudioShow};
+use f16_core::audio::{AudioColors, AudioLook, AudioShow};
 use f16_core::effects::{EffectParams, Renderer, Rgb};
 use f16_core::keycodes::{KeyWrite, Keymap};
 use f16_core::layout::{CombinedLayout, MacropadSide, Point};
@@ -82,6 +82,7 @@ pub struct AudioSettings {
     pub microphone: bool,
     /// Which microphone ("" = the default one).
     pub device: String,
+    pub colors: AudioColors,
 }
 
 impl AudioSettings {
@@ -399,16 +400,18 @@ impl Engine {
                         };
                     }
                     run.show.look = settings.look;
+                    run.show.colors = settings.colors;
                     run.settings = settings;
                 }
                 None => match settings.listener(self.demo) {
                     Ok(listener) => {
                         self.stop_linked();
-                        let look = settings.look;
+                        let mut show = AudioShow::new(settings.look);
+                        show.colors = settings.colors;
                         self.audio = Some(AudioRun {
                             settings,
                             listener,
-                            show: AudioShow::new(look),
+                            show,
                             last: Instant::now(),
                         });
                         self.start_linked();

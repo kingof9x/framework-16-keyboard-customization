@@ -253,6 +253,14 @@ export global App {
     callback audio-input-chosen(int);
     callback audio-device-chosen(int);
     callback audio-devices-refresh();
+    // Audio colors: 0 automatic, 1 rainbow, 2 meter, 3 fire, 4 ocean, 5 one color (hue/sat below)
+    in-out property <int> audio-colors;
+    in-out property <int> audio-hue: 170;
+    in-out property <int> audio-sat: 255;
+    in property <color> audio-full;
+    in property <color> audio-picked;
+    in property <string> audio-hex;
+    callback audio-colors-changed();
     // How loud the sound is right now, 0..1
     in property <float> audio-level;
     // Ctrl+Alt+Shift+M (from the shortcut watcher)
