@@ -4,7 +4,7 @@ import { Theme } from "../theme.slint";
 import { App } from "../state.slint";
 import { Button, ComboBox } from "std-widgets.slint";
 import { Card, Group, Hint, Body, RadioButton, Status } from "../widgets.slint";
-import { OnOff, SliderRow } from "../parts.slint";
+import { OnOff, SliderRow, ColorPicker } from "../parts.slint";
 
 export component AudioPage inherits VerticalLayout {
     spacing: 12px;
@@ -70,6 +70,27 @@ export component AudioPage inherits VerticalLayout {
                 clicked => { App.audio-look = l.key; App.audio-changed(); }
             }
             HorizontalLayout { padding-left: 30px; Hint { text: l.about; } }
+        }
+    }
+    Group {
+        title: "Colors";
+        help: "Automatic: green, yellow and red for the bars and the level meter, a rainbow for the other shows.";
+        HorizontalLayout {
+            spacing: 16px;
+            alignment: start;
+            for c[i] in ["Automatic", "Rainbow", "Green, yellow, red", "Fire", "Ocean", "One color"]: RadioButton {
+                text: c;
+                checked: App.audio-colors == i;
+                clicked => { App.audio-colors = i; App.audio-colors-changed(); }
+            }
+        }
+        if App.audio-colors == 5: ColorPicker {
+            hue <=> App.audio-hue;
+            sat <=> App.audio-sat;
+            full: App.audio-full;
+            picked: App.audio-picked;
+            hex: App.audio-hex;
+            changed => { App.audio-colors-changed(); }
         }
     }
     Group {
