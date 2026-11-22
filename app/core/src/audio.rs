@@ -17,10 +17,11 @@ pub enum AudioLook {
     BassRipples,
     ColorWash,
     Strobe,
+    Typing,
 }
 
 impl AudioLook {
-    pub const ALL: [AudioLook; 7] = [
+    pub const ALL: [AudioLook; 8] = [
         AudioLook::Spectrum,
         AudioLook::CenterOut,
         AudioLook::Meter,
@@ -28,6 +29,7 @@ impl AudioLook {
         AudioLook::BassRipples,
         AudioLook::ColorWash,
         AudioLook::Strobe,
+        AudioLook::Typing,
     ];
 
     pub fn name(self) -> &'static str {
@@ -39,6 +41,7 @@ impl AudioLook {
             AudioLook::BassRipples => "Bass ripples",
             AudioLook::ColorWash => "Color wash",
             AudioLook::Strobe => "Strobe",
+            AudioLook::Typing => "Typing",
         }
     }
 
@@ -51,6 +54,7 @@ impl AudioLook {
             AudioLook::BassRipples => "Each bass hit sends a ring of color out across the keys.",
             AudioLook::ColorWash => "Slow flowing colors that brighten with the music and shift with the treble.",
             AudioLook::Strobe => "White flashes on the strongest beats.",
+            AudioLook::Typing => "Only the keys you press light up, in a color the music picks: bass makes them red, treble blue. Louder music makes them bigger.",
         }
     }
 
@@ -63,6 +67,7 @@ impl AudioLook {
             AudioLook::BassRipples => "ripples",
             AudioLook::ColorWash => "wash",
             AudioLook::Strobe => "strobe",
+            AudioLook::Typing => "typing",
         }
     }
 
@@ -226,13 +231,23 @@ struct Ring {
     hue: f32,
 }
 
+/// A key press still showing: where, when, its color (None = white) and how big.
+struct Press {
+    at: Point,
+    born: f32,
+    color: Option<Rgb>,
+    size: f32,
+}
+
 /// The show's state between frames: smoothed levels, beats, rings.
 pub struct AudioShow {
     pub look: AudioLook,
     pub colors: AudioColors,
     pub keys: KeyReact,
-    /// Key presses still showing: where, and when.
-    presses: Vec<(Point, f32)>,
+    /// Key presses still showing.
+    presses: Vec<Press>,
+    /// Where the music's weight is, from bass (0) to treble (1), smoothed.
+    centroid: f32,
     levels: [f32; BANDS],
     loudness: f32,
     peak: f32,
@@ -251,6 +266,7 @@ impl AudioShow {
             colors: AudioColors::Auto,
             keys: KeyReact::Off,
             presses: Vec::new(),
+            centroid: 0.0,
             levels: [0.0; BANDS],
             loudness: 0.0,
             peak: 0.0,
@@ -277,6 +293,18 @@ impl AudioShow {
             let k = if src > *l { 0.6 } else { (dt * 6.0).min(1.0) };
             *l += (src - *l) * k;
         }
+        let total: f32 = self.levels.iter().sum();
+        if total > 0.05 {
+            let c = self
+                .levels
+                .iter()
+                .enumerate()
+                .map(|(i, l)| i as f32 * l)
+                .sum::<f32>()
+                / total
+                / (BANDS - 1) as f32;
+            self.centroid += (c - self.centroid) * (dt * 8.0).min(1.0);
+        }
         let loud = bands.iter().sum::<f32>() / n as f32;
         self.loudness += (loud - self.loudness) * (dt * 10.0).min(1.0);
         self.peak = (self.peak - dt * 0.4).max(self.loudness);
@@ -297,8 +325,8 @@ impl AudioShow {
         self.flash *= (-dt * 6.0).exp();
         let t = self.t;
         self.rings.retain(|r| t - r.born < 1.6);
-        let life = self.keys.life();
-        self.presses.retain(|(_, born)| t - born < life);
+        let life = self.key_style().life();
+        self.presses.retain(|p| t - p.born < life);
         beat
     }
 
@@ -310,29 +338,55 @@ impl AudioShow {
             .collect()
     }
 
-    /// A key was pressed at `at` (layout units).
-    pub fn press(&mut self, at: Point) {
-        if self.keys != KeyReact::Off {
-            self.presses.push((at, self.t));
+    /// How key presses show: the chosen style, or a splash for the Typing show.
+    fn key_style(&self) -> KeyReact {
+        match (self.look, self.keys) {
+            (AudioLook::Typing, KeyReact::Off) => KeyReact::Splash,
+            (_, k) => k,
         }
     }
 
-    /// The show's color with key presses on top (blended towards white).
-    fn with_presses(&self, p: Point, c: Rgb) -> Rgb {
-        let w = self
-            .presses
-            .iter()
-            .map(|(at, born)| {
-                let d = ((p.x - at.x).powi(2) + (p.y - at.y).powi(2)).sqrt();
-                self.keys.weight(d, self.t - born)
-            })
-            .fold(0.0f32, f32::max)
-            .min(1.0);
-        if w <= 0.0 {
-            return c;
+    /// A key was pressed at `at` (layout units).
+    pub fn press(&mut self, at: Point) {
+        if self.key_style() == KeyReact::Off {
+            return;
         }
-        let mix = |v: u8| (v as f32 + (255.0 - v as f32) * w).round() as u8;
-        [mix(c[0]), mix(c[1]), mix(c[2])]
+        let (color, size) = if self.look == AudioLook::Typing {
+            // The music picks the color (bass to treble along the palette) and the size
+            let pal = self.colors.resolve(self.look);
+            let loud = (self.loudness * 1.5).min(1.0);
+            (
+                Some(pal.rgb(self.centroid, 0.5 + 0.5 * loud)),
+                1.0 + 1.5 * loud,
+            )
+        } else {
+            (None, 1.0)
+        };
+        self.presses.push(Press {
+            at,
+            born: self.t,
+            color,
+            size,
+        });
+    }
+
+    /// The show's color with key presses on top.
+    fn with_presses(&self, p: Point, c: Rgb) -> Rgb {
+        let style = self.key_style();
+        let mut out = c;
+        for press in &self.presses {
+            let d = ((p.x - press.at.x).powi(2) + (p.y - press.at.y).powi(2)).sqrt() / press.size;
+            let w = style.weight(d, self.t - press.born).min(1.0);
+            if w <= 0.0 {
+                continue;
+            }
+            let to = press.color.unwrap_or([255, 255, 255]);
+            for k in 0..3 {
+                let v = out[k] as f32 + (to[k] as f32 - out[k] as f32) * w;
+                out[k] = out[k].max(v.round() as u8);
+            }
+        }
+        out
     }
 
     fn band_at(&self, f: f32) -> f32 {
@@ -403,6 +457,7 @@ impl AudioShow {
                 };
                 pal.rgb(t, 0.15 + 0.85 * (self.loudness * 1.3).min(1.0))
             }
+            AudioLook::Typing => [0, 0, 0],
             AudioLook::Strobe => {
                 let since = self.t - self.last_beat;
                 if since < 0.06 {
@@ -526,6 +581,29 @@ mod tests {
         for r in KeyReact::ALL {
             assert_eq!(KeyReact::from_key(r.key()), Some(r));
         }
+    }
+
+    #[test]
+    fn typing_colors_follow_the_music() {
+        let key = Point { x: 3.5, y: 2.5 };
+        let color_for = |bands: &[f32]| {
+            let mut show = AudioShow::new(AudioLook::Typing);
+            for _ in 0..30 {
+                show.update(bands, 0.03);
+            }
+            show.press(key);
+            show.update(bands, 0.01);
+            show.render(&[key, Point { x: 15.5, y: 0.5 }], 20.0, 6.0)
+        };
+        let mut bass = [0.0f32; 16];
+        bass[..3].fill(0.9);
+        let mut treble = [0.0f32; 16];
+        treble[12..].fill(0.9);
+        let b = color_for(&bass);
+        let t = color_for(&treble);
+        assert!(b[0][0] > b[0][2], "bass is red: {:?}", b[0]);
+        assert!(t[0][2] > t[0][0], "treble is blue/purple: {:?}", t[0]);
+        assert_eq!(b[1], [0, 0, 0], "other keys stay dark");
     }
 
     #[test]

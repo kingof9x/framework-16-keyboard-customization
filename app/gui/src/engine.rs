@@ -717,7 +717,7 @@ impl Engine {
         if self
             .audio
             .as_ref()
-            .is_some_and(|r| r.show.keys != KeyReact::Off)
+            .is_some_and(|r| r.show.keys != KeyReact::Off || r.show.look == AudioLook::Typing)
         {
             let kinds: Vec<DeviceKind> = self.open.values().map(|o| o.dev.kind).collect();
             for kind in kinds {
