@@ -261,6 +261,9 @@ export global App {
     in property <color> audio-picked;
     in property <string> audio-hex;
     callback audio-colors-changed();
+    // Key presses on top of the show: 0 off, 1 light up the key, 2 ripple, 3 splash
+    in property <int> audio-keys;
+    callback audio-keys-chosen(int);
     // How loud the sound is right now, 0..1
     in property <float> audio-level;
     // Ctrl+Alt+Shift+M (from the shortcut watcher)

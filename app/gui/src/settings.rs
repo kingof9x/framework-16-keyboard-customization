@@ -2,7 +2,7 @@
 //! (a small text file in %APPDATA%\framework-16-keyboard-control on Windows).
 
 use crate::deck::{Choice, Dev, KbType, Look, Setup};
-use f16_core::audio::{AudioColors, AudioLook};
+use f16_core::audio::{AudioColors, AudioLook, KeyReact};
 use f16_core::effects::LinkedEffect;
 use f16_core::keycodes::APP_SLOTS;
 use f16_core::keys::SideModule;
@@ -41,6 +41,8 @@ pub struct Saved {
     pub audio_mic: bool,
     pub audio_device: String,
     pub audio_colors: AudioColors,
+    /// Key presses on top of the audio show.
+    pub audio_keys: KeyReact,
     /// Look for a newer version when the app starts.
     pub auto_update: bool,
 }
@@ -81,6 +83,7 @@ impl Default for Saved {
             audio_mic: false,
             audio_device: String::new(),
             audio_colors: AudioColors::Auto,
+            audio_keys: KeyReact::Off,
             auto_update: true,
         }
     }
@@ -213,7 +216,11 @@ pub fn to_text(s: &Saved) -> String {
         if s.audio_mic { "mic" } else { "playback" },
         s.audio_device
     );
-    out += &format!("audio-colors={}\n", s.audio_colors.key());
+    out += &format!(
+        "audio-colors={}\naudio-keys={}\n",
+        s.audio_colors.key(),
+        s.audio_keys.key()
+    );
     if let Some(a) = s.autostart {
         out += &format!("autostart={a}\n");
     }
@@ -284,6 +291,7 @@ pub fn from_text(text: &str) -> Saved {
             "theme" if crate::theme::CHOICES.contains(&v) => s.theme = v.to_string(),
             "tray" => s.tray = v != "false",
             "auto-update" => s.auto_update = v != "false",
+            "audio-keys" => s.audio_keys = KeyReact::from_key(v).unwrap_or_default(),
             "audio-colors" => s.audio_colors = AudioColors::from_key(v).unwrap_or_default(),
             "audio-input" => {
                 let (kind, name) = v.split_once(' ').unwrap_or((v, ""));
@@ -380,6 +388,7 @@ mod tests {
         s.audio_hotkey = false;
         s.audio_mic = true;
         s.audio_colors = AudioColors::One(170.0 / 255.0, 1.0);
+        s.audio_keys = KeyReact::Ripple;
         s.audio_device = "Microphone (Realtek(R) Audio)".into();
         s.paint.insert((Dev::Keyboard, 30), (128, 255));
         s.paint.insert((Dev::Module, 3), (0, 0));

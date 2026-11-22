@@ -94,6 +94,19 @@ export component AudioPage inherits VerticalLayout {
         }
     }
     Group {
+        title: "Key presses";
+        help: "Keys you press light up on top of the show, on the keyboard and the macropad.";
+        HorizontalLayout {
+            spacing: 16px;
+            alignment: start;
+            for k[i] in ["Off", "Light up the key", "Ripple", "Splash"]: RadioButton {
+                text: k;
+                checked: App.audio-keys == i;
+                clicked => { App.audio-keys-chosen(i); }
+            }
+        }
+    }
+    Group {
         title: "Sensitivity";
         help: "Higher shows more of quiet music. Loudness is evened out automatically, like in White Rabbit.";
         SliderRow { label: "Sensitivity"; value <=> App.audio-sensitivity; maximum: 10; minimum: 1; changed => { App.audio-changed(); } }

@@ -4,7 +4,7 @@
 use crate::audio_src::Listener;
 use crate::device::{self, Device, Found};
 use crate::sim::SimPort;
-use f16_core::audio::{AudioColors, AudioLook, AudioShow};
+use f16_core::audio::{AudioColors, AudioLook, AudioShow, KeyReact};
 use f16_core::effects::{EffectParams, Renderer, Rgb};
 use f16_core::keycodes::{KeyWrite, Keymap};
 use f16_core::layout::{CombinedLayout, MacropadSide, Point};
@@ -83,6 +83,8 @@ pub struct AudioSettings {
     /// Which microphone ("" = the default one).
     pub device: String,
     pub colors: AudioColors,
+    /// How key presses show on top of the show.
+    pub keys: KeyReact,
 }
 
 impl AudioSettings {
@@ -401,6 +403,7 @@ impl Engine {
                     }
                     run.show.look = settings.look;
                     run.show.colors = settings.colors;
+                    run.show.keys = settings.keys;
                     run.settings = settings;
                 }
                 None => match settings.listener(self.demo) {
@@ -408,6 +411,7 @@ impl Engine {
                         self.stop_linked();
                         let mut show = AudioShow::new(settings.look);
                         show.colors = settings.colors;
+                        show.keys = settings.keys;
                         self.audio = Some(AudioRun {
                             settings,
                             listener,
@@ -708,9 +712,37 @@ impl Engine {
 
     /// One audio mode frame: listen, update the show, draw it on both devices.
     fn render_audio(&mut self) {
+        // Key presses since the last frame, for the key reactions on top of the show
+        let mut presses = Vec::new();
+        if self
+            .audio
+            .as_ref()
+            .is_some_and(|r| r.show.keys != KeyReact::Off)
+        {
+            let kinds: Vec<DeviceKind> = self.open.values().map(|o| o.dev.kind).collect();
+            for kind in kinds {
+                match self.open[&key(kind)]
+                    .dev
+                    .transact(&proto::key_events_request())
+                {
+                    Ok(p) => presses.extend(
+                        proto::parse_key_events(&p)
+                            .into_iter()
+                            .filter_map(|led| self.layout.led(kind, led)),
+                    ),
+                    Err(e) => {
+                        self.fail(kind, e);
+                        return;
+                    }
+                }
+            }
+        }
         let Some(run) = self.audio.as_mut() else {
             return;
         };
+        for at in presses {
+            run.show.press(at);
+        }
         let dt = run.last.elapsed().as_secs_f32().clamp(0.001, 0.2);
         run.last = Instant::now();
         let bands = run.listener.bands(dt);

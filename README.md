@@ -173,7 +173,8 @@ is expected.
      while you adjust.
    * **Audio:** turn on **Audio reactivity** (or hold **F12** and press **↑**),
      pick a show, its **Colors** (automatic, rainbow, green-yellow-red, fire,
-     ocean or one color of your choice) and the sensitivity. Under **Listen to**, pick what the
+     ocean or one color of your choice), **Key presses** (keys you press
+     light up, ripple or splash on top of the show) and the sensitivity. Under **Listen to**, pick what the
      PC is playing or a microphone (like in White Rabbit); **Sound now** shows
      whether it hears anything. Turning it off puts back what the Lighting page shows.
    * **Key mapping:** click a key in the picture, then pick **Framework default**,
