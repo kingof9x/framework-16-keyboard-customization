@@ -37,6 +37,9 @@ pub struct Saved {
     pub audio_look: AudioLook,
     pub audio_sensitivity: u8,
     pub audio_hotkey: bool,
+    /// Audio mode listens to a microphone (`audio_device`, "" = default) instead of what the PC plays.
+    pub audio_mic: bool,
+    pub audio_device: String,
     /// Look for a newer version when the app starts.
     pub auto_update: bool,
 }
@@ -74,6 +77,8 @@ impl Default for Saved {
             audio_look: AudioLook::Spectrum,
             audio_sensitivity: 5,
             audio_hotkey: true,
+            audio_mic: false,
+            audio_device: String::new(),
             auto_update: true,
         }
     }
@@ -201,6 +206,11 @@ pub fn to_text(s: &Saved) -> String {
         s.audio_sensitivity,
         s.audio_hotkey
     );
+    out += &format!(
+        "audio-input={} {}\n",
+        if s.audio_mic { "mic" } else { "playback" },
+        s.audio_device
+    );
     if let Some(a) = s.autostart {
         out += &format!("autostart={a}\n");
     }
@@ -271,6 +281,11 @@ pub fn from_text(text: &str) -> Saved {
             "theme" if crate::theme::CHOICES.contains(&v) => s.theme = v.to_string(),
             "tray" => s.tray = v != "false",
             "auto-update" => s.auto_update = v != "false",
+            "audio-input" => {
+                let (kind, name) = v.split_once(' ').unwrap_or((v, ""));
+                s.audio_mic = kind == "mic";
+                s.audio_device = name.trim().to_string();
+            }
             "audio" => {
                 let p: Vec<&str> = v.split_whitespace().collect();
                 if let [look, sens, hotkey] = p[..] {
@@ -359,6 +374,8 @@ mod tests {
         s.audio_look = AudioLook::BassRipples;
         s.audio_sensitivity = 8;
         s.audio_hotkey = false;
+        s.audio_mic = true;
+        s.audio_device = "Microphone (Realtek(R) Audio)".into();
         s.paint.insert((Dev::Keyboard, 30), (128, 255));
         s.paint.insert((Dev::Module, 3), (0, 0));
         s.apps[2] = r"C:\Program Files\Resolume Arena\Arena.exe".into();

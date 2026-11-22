@@ -76,6 +76,10 @@ pub struct State {
     /// How long the last picture took to draw, and when it was drawn.
     draw_cost: Duration,
     last_draw: Instant,
+    /// The microphones found (index 0 of the list is "Default microphone"), and the
+    /// answer of a background look for them.
+    mics: Vec<String>,
+    mics_inbox: Arc<Mutex<Option<Vec<String>>>>,
     /// Audio mode is on (asked for; the engine says whether it really draws).
     audio_on: bool,
     /// What the app found plugged in last time (to follow module swaps).
@@ -330,6 +334,24 @@ impl State {
         engine::AudioSettings {
             look: self.s.audio_look,
             sensitivity: self.s.audio_sensitivity,
+            microphone: self.s.audio_mic,
+            device: self.s.audio_device.clone(),
+        }
+    }
+
+    /// Looks for the PC's microphones in the background; `tick` picks up the answer.
+    fn find_microphones(&self) {
+        let inbox = self.mics_inbox.clone();
+        std::thread::spawn(move || {
+            *inbox.lock().unwrap() = Some(audio_src::microphones());
+        });
+    }
+
+    /// Restarts listening with the current choices, if audio mode is on.
+    fn audio_settings_changed(&mut self) {
+        if self.audio_on {
+            let set = self.audio_settings();
+            self.engine.send(Command::SetAudio(Some(set)));
         }
     }
 
@@ -868,6 +890,11 @@ fn tick(app: &AppWindow, st: &mut State) {
         st.audio_on = false; // it couldn't start
     }
     g.set_audio_on(st.audio_on);
+    g.set_audio_level(if st.audio_on { status.audio_level } else { 0.0 });
+    if let Some(found) = st.mics_inbox.lock().unwrap().take() {
+        st.mics = found;
+        push_mics(app, st);
+    }
     g.set_audio_status(
         if let Some(p) = &status.audio_problem {
             p.clone()
@@ -994,6 +1021,28 @@ fn tick(app: &AppWindow, st: &mut State) {
     }
 }
 
+/// The microphone list and the chosen one, into the Audio page.
+fn push_mics(app: &AppWindow, st: &State) {
+    let g = app.global::<App>();
+    let mut names: Vec<SharedString> = vec!["Default microphone".into()];
+    names.extend(st.mics.iter().map(|m| SharedString::from(m.as_str())));
+    // A chosen microphone that isn't plugged in right now stays in the list
+    if !st.s.audio_device.is_empty() && !st.mics.contains(&st.s.audio_device) {
+        names.push(st.s.audio_device.as_str().into());
+    }
+    let index = if st.s.audio_device.is_empty() {
+        0
+    } else {
+        names
+            .iter()
+            .position(|n| n.as_str() == st.s.audio_device)
+            .unwrap_or(0)
+    };
+    g.set_audio_devices(ModelRc::new(VecModel::from(names)));
+    g.set_audio_device(index as i32);
+    g.set_audio_input(st.s.audio_mic as i32);
+}
+
 /// Puts one device's LED calibration into the window's sliders.
 fn push_cal(app: &AppWindow, status: &Status, kind: DeviceKind) {
     let g = app.global::<App>();
@@ -1103,6 +1152,8 @@ fn main() -> Result<(), slint::PlatformError> {
         white_test: false,
         last_detected: None,
         audio_on: false,
+        mics: vec![],
+        mics_inbox: Arc::new(Mutex::new(None)),
         last_kb_state: None,
         draw_cost: Duration::ZERO,
         last_draw: Instant::now(),
@@ -1130,6 +1181,8 @@ fn main() -> Result<(), slint::PlatformError> {
         push_all(&app, &st);
         st.sync_background();
         keyedit::push(&app, &mut st);
+        push_mics(&app, &st);
+        st.find_microphones();
         let g = app.global::<App>();
         g.set_version(update::CURRENT.into());
         g.set_auto_update(st.s.auto_update);
@@ -1423,10 +1476,23 @@ fn main() -> Result<(), slint::PlatformError> {
             st.s.audio_look = l;
         }
         st.s.audio_sensitivity = g.get_audio_sensitivity().clamp(1, 10) as u8;
-        if st.audio_on {
-            let set = st.audio_settings();
-            st.engine.send(Command::SetAudio(Some(set)));
-        }
+        st.audio_settings_changed();
+    });
+    on!(on_audio_input_chosen, |app, st, i: i32| {
+        st.s.audio_mic = i == 1;
+        push_mics(&app, st);
+        st.audio_settings_changed();
+    });
+    on!(on_audio_device_chosen, |app, st, i: i32| {
+        let names = app.global::<App>().get_audio_devices();
+        st.s.audio_device = match names.row_data(i.max(0) as usize) {
+            Some(n) if i > 0 => n.to_string(),
+            _ => String::new(),
+        };
+        st.audio_settings_changed();
+    });
+    on!(on_audio_devices_refresh, |_app, st| {
+        st.find_microphones();
     });
     on!(on_audio_hotkey_toggled, |app, st, on: bool| {
         st.s.audio_hotkey = on;

@@ -73,11 +73,21 @@ pub enum Command {
     Shutdown,
 }
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct AudioSettings {
     pub look: AudioLook,
     /// 1..10, 5 = normal.
     pub sensitivity: u8,
+    /// Listen to a microphone instead of what the PC plays.
+    pub microphone: bool,
+    /// Which microphone ("" = the default one).
+    pub device: String,
+}
+
+impl AudioSettings {
+    fn listener(&self, demo: bool) -> Result<Listener, String> {
+        Listener::start(demo, self.sensitivity, self.microphone, &self.device)
+    }
 }
 
 struct AudioRun {
@@ -131,6 +141,8 @@ pub struct Status {
     /// What audio mode listens to, or why it can't.
     pub audio_device: Option<String>,
     pub audio_problem: Option<String>,
+    /// How loud the sound is right now (0..1), for the meter on the Audio page.
+    pub audio_level: f32,
     /// Audio mode's last frame per device (LED order): [keyboard, macropad].
     pub audio_colors: [Vec<Rgb>; 2],
 }
@@ -374,8 +386,11 @@ impl Engine {
             }
             Command::SetAudio(Some(settings)) => match self.audio.as_mut() {
                 Some(run) => {
-                    if run.settings.sensitivity != settings.sensitivity {
-                        run.listener = match Listener::start(self.demo, settings.sensitivity) {
+                    if run.settings.sensitivity != settings.sensitivity
+                        || run.settings.microphone != settings.microphone
+                        || run.settings.device != settings.device
+                    {
+                        run.listener = match settings.listener(self.demo) {
                             Ok(l) => l,
                             Err(e) => {
                                 self.audio_failed(e);
@@ -386,13 +401,14 @@ impl Engine {
                     run.show.look = settings.look;
                     run.settings = settings;
                 }
-                None => match Listener::start(self.demo, settings.sensitivity) {
+                None => match settings.listener(self.demo) {
                     Ok(listener) => {
                         self.stop_linked();
+                        let look = settings.look;
                         self.audio = Some(AudioRun {
                             settings,
                             listener,
-                            show: AudioShow::new(settings.look),
+                            show: AudioShow::new(look),
                             last: Instant::now(),
                         });
                         self.start_linked();
@@ -682,6 +698,7 @@ impl Engine {
         let mut st = self.status.lock().unwrap();
         st.audio = false;
         st.audio_colors = Default::default();
+        st.audio_level = 0.0;
         drop(st);
         (self.repaint)();
     }
@@ -695,6 +712,7 @@ impl Engine {
         run.last = Instant::now();
         let bands = run.listener.bands(dt);
         run.show.update(&bands, dt);
+        let level = bands.iter().sum::<f32>() / bands.len().max(1) as f32;
         let (device, problem) = (run.listener.device(), run.listener.problem());
         let kinds: Vec<DeviceKind> = self.open.values().map(|o| o.dev.kind).collect();
         let mut colors_out: [Vec<Rgb>; 2] = Default::default();
@@ -712,6 +730,7 @@ impl Engine {
         }
         let mut st = self.status.lock().unwrap();
         st.audio_colors = colors_out;
+        st.audio_level = level;
         st.audio_device = device;
         st.audio_problem = problem;
         drop(st);

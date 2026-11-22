@@ -172,8 +172,9 @@ is expected.
      red/green/blue sliders per device, and can show plain white on both
      while you adjust.
    * **Audio:** turn on **Audio reactivity** (or hold **F12** and press **↑**),
-     pick a show and set the sensitivity. It listens to whatever the PC is
-     playing. Turning it off puts back what the Lighting page shows.
+     pick a show and set the sensitivity. Under **Listen to**, pick what the
+     PC is playing or a microphone (like in White Rabbit); **Sound now** shows
+     whether it hears anything. Turning it off puts back what the Lighting page shows.
    * **Key mapping:** click a key in the picture, then pick **Framework default**,
      **Nothing** (turned off), **A key** (with Ctrl, Shift, Alt or Super if you
      like) or **Open an app** (pick the program). **Keyboard shows** switches
