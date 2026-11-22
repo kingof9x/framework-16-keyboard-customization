@@ -102,7 +102,8 @@ uint8_t hostfx_device_kind(void) {
 
 // ---------------------------------------------------------------------------
 // F12 shortcuts: hold F12 and press
-//   Right / Left  next / previous lighting effect (not saved)
+//   Right / Left  next / previous lighting effect (not saved; only effects that show
+//                 something without typing)
 //   Down          back to the saved effect
 //   Up            Ctrl+Alt+Shift+M: audio mode on/off in the PC app (and White Rabbit)
 // F12 is matched by its position, so it works whatever F12 is set to send. F12's
@@ -133,15 +134,48 @@ static bool at(keyrecord_t *record, uint8_t row, uint8_t col) {
     return record->event.key.row == row && record->event.key.col == col;
 }
 
+// Effects the F12 shortcuts step through: the ones that show something on their own.
+// Left out: the PC-controlled and painted-keys-only effects (dark without the app or
+// painted keys) and the typing effects that stay dark until you type (they can still be
+// picked in the app).
+static bool shown_on_its_own(uint8_t mode) {
+    switch (mode) {
+        case RGB_MATRIX_NONE:
+        case RGB_MATRIX_CUSTOM_HOST_DRIVEN:
+        case RGB_MATRIX_CUSTOM_PAINT_ONLY:
+        case RGB_MATRIX_TYPING_HEATMAP:
+        case RGB_MATRIX_SOLID_REACTIVE_SIMPLE:
+        case RGB_MATRIX_SOLID_REACTIVE_WIDE:
+        case RGB_MATRIX_SOLID_REACTIVE_MULTIWIDE:
+        case RGB_MATRIX_SOLID_REACTIVE_CROSS:
+        case RGB_MATRIX_SOLID_REACTIVE_MULTICROSS:
+        case RGB_MATRIX_SOLID_REACTIVE_NEXUS:
+        case RGB_MATRIX_SOLID_REACTIVE_MULTINEXUS:
+        case RGB_MATRIX_SPLASH:
+        case RGB_MATRIX_MULTISPLASH:
+        case RGB_MATRIX_SOLID_SPLASH:
+        case RGB_MATRIX_SOLID_MULTISPLASH:
+            return false;
+        default:
+            return true;
+    }
+}
+
 static void step_effect(bool forward) {
-    // Skip the PC-controlled effect: on its own it shows nothing
-    for (uint8_t tries = 0; tries < 3; tries++) {
+    uint8_t mode = rgb_matrix_get_mode();
+    for (uint8_t tries = 0; tries < RGB_MATRIX_EFFECT_MAX; tries++) {
         if (forward) {
-            rgb_matrix_step_noeeprom();
+            mode = (mode + 1 < RGB_MATRIX_EFFECT_MAX) ? mode + 1 : 1;
         } else {
-            rgb_matrix_step_reverse_noeeprom();
+            mode = (mode > 1) ? mode - 1 : RGB_MATRIX_EFFECT_MAX - 1;
         }
-        if (rgb_matrix_get_mode() != RGB_MATRIX_CUSTOM_HOST_DRIVEN) break;
+        if (shown_on_its_own(mode)) break;
+    }
+    rgb_matrix_mode_noeeprom(mode);
+    // Lights that were turned off (or set to zero brightness) come back on, so the step shows
+    if (!rgb_matrix_is_enabled()) rgb_matrix_enable_noeeprom();
+    if (rgb_matrix_get_val() == 0) {
+        rgb_matrix_sethsv_noeeprom(rgb_matrix_get_hue(), rgb_matrix_get_sat(), 128);
     }
 }
 

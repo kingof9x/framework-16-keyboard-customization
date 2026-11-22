@@ -751,8 +751,8 @@ pub const NAMED: &[Named] = &[
     Named {
         group: "Media",
         code: 0x00AF,
-        label: "Media player",
-        short: "Media",
+        label: "Framework key (Framework's website)",
+        short: "Frmwk",
     },
     Named {
         group: "Screen",
