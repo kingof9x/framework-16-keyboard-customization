@@ -6,7 +6,7 @@ import { App } from "../state.slint";
 import { Card, Group, Hint, Body, RadioButton, CheckBox, Status, Switch } from "../widgets.slint";
 import { OnOff } from "../parts.slint";
 
-// A program path with a Browse button.
+// A program path with a Browse button, and a button that picks this app itself.
 component AppPath inherits HorizontalLayout {
     in-out property <string> path;
     callback edited(string);
@@ -19,6 +19,10 @@ component AppPath inherits HorizontalLayout {
         edited(t) => { root.edited(t); }
     }
     Button { text: "Browse…"; clicked => { root.browse(); } }
+    if App.this-app-path != "": Button {
+        text: "This app";
+        clicked => { root.path = App.this-app-path; root.edited(App.this-app-path); }
+    }
 }
 
 component ComboRow inherits HorizontalLayout {
@@ -97,7 +101,7 @@ export component KeysPage inherits VerticalLayout {
                 padding-left: 30px;
                 spacing: 6px;
                 AppPath { path <=> App.key-app; edited(t) => { App.key-app-edited(t); } browse => { App.key-app-browse(); } }
-                Hint { text: "Works while this app is running. It waits in the notification area when you close the window" + (App.autostart ? " and starts with Windows." : ". Turn on Start with Windows under Settings so it is always ready."); }
+                Hint { text: "\"This app\" opens this window (handy on F12 instead of Framework's website). Works while this app is running. It waits in the notification area when you close the window" + (App.autostart ? " and starts with Windows." : ". Turn on Start with Windows under Settings so it is always ready."); }
             }
         }
         if App.key-note != "": Hint { text: App.key-note; }
@@ -106,7 +110,7 @@ export component KeysPage inherits VerticalLayout {
     Card {
         icon: @image-url("../icons/keyboard.svg");
         title: "F12 shortcuts";
-        help: App.shortcuts-known ? "Hold F12 and press → or ← for the next or previous effect, ↓ for your saved effect, ↑ for audio reactivity. F12 on its own still works (when you let go)." : "Needs the latest keyboard firmware: update it on the Firmware page.";
+        help: App.shortcuts-known ? "Hold F12 and press → or ← for the next or previous effect, ↓ for your saved effect, ↑ for audio reactivity. This switch only turns these on or off: to change what F12 itself does, click F12 on the keyboard above." : "Needs the latest keyboard firmware: update it on the Firmware page.";
         if App.shortcuts-known || !App.kb-present: OnOff { checked: App.shortcuts-on; enabled: App.shortcuts-known; toggled(v) => { App.shortcuts-toggled(v); } }
         if !App.shortcuts-known && App.kb-present: Button { text: "Update firmware"; clicked => { App.page = "firmware"; } }
     }
