@@ -141,6 +141,17 @@ export global App {
     in property <bool> mod-present;
     callback bootloader(int);
     callback rescan();
+    // Firmware updates from the app: which device (0 keyboard, 1 macropad), what it is doing.
+    in-out property <int> confirm-flash: -1;
+    in property <int> flash-which: -1;
+    in property <bool> flash-busy;
+    in property <bool> flash-failed;
+    in property <string> flash-status;
+    // "E:" when a device is waiting in flashing mode, "" when none.
+    in property <string> waiting-drive;
+    callback flash-latest(int);
+    callback flash-file(int);
+    callback flash-waiting(int);
 
     // 0 system, 1 light, 2 dark, 3 classic
     in-out property <int> theme-choice;

@@ -38,7 +38,8 @@ pub enum Command {
     SetLinked(Option<EffectParams>),
     SetSide(MacropadSide),
     /// Restart a device into flashing mode (works on stock firmware too).
-    Bootloader(DeviceKind),
+    /// `by_app`: the app copies the firmware on itself (Firmware page "Update firmware").
+    Bootloader(DeviceKind, bool),
     /// Joined surface: Some((x_start, x_end)) per device, None = separate.
     /// While joined, the effect clocks are kept in step.
     SetSpan {
@@ -525,7 +526,7 @@ impl Engine {
             Command::Rescan => {
                 self.last_scan = None;
             }
-            Command::Bootloader(kind) => {
+            Command::Bootloader(kind, by_app) => {
                 let sent = match self.open.remove(&key(kind)) {
                     Some(o) => o.dev.send(&proto::bootloader_request()).is_ok(),
                     None => self
@@ -535,7 +536,9 @@ impl Engine {
                         .is_some_and(|d| d.send(&proto::bootloader_request()).is_ok()),
                 };
                 self.rebuild_layout();
-                self.set_message(if sent {
+                self.set_message(if sent && by_app {
+                    format!("Updating the {} firmware…", kind.name().to_lowercase())
+                } else if sent {
                     format!(
                         "{} restarted into flashing mode: drag the .uf2 file onto the new RPI-RP2 drive.",
                         kind.name()

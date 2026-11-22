@@ -106,8 +106,9 @@ export component KeysPage inherits VerticalLayout {
     Card {
         icon: @image-url("../icons/keyboard.svg");
         title: "F12 shortcuts";
-        help: App.shortcuts-known ? "Hold F12 and press → or ← for the next or previous effect, ↓ for your saved effect, ↑ for audio reactivity. F12 on its own still works (when you let go)." : "Needs the latest keyboard firmware (see the Firmware page).";
-        OnOff { checked: App.shortcuts-on; enabled: App.shortcuts-known; toggled(v) => { App.shortcuts-toggled(v); } }
+        help: App.shortcuts-known ? "Hold F12 and press → or ← for the next or previous effect, ↓ for your saved effect, ↑ for audio reactivity. F12 on its own still works (when you let go)." : "Needs the latest keyboard firmware: update it on the Firmware page.";
+        if App.shortcuts-known || !App.kb-present: OnOff { checked: App.shortcuts-on; enabled: App.shortcuts-known; toggled(v) => { App.shortcuts-toggled(v); } }
+        if !App.shortcuts-known && App.kb-present: Button { text: "Update firmware"; clicked => { App.page = "firmware"; } }
     }
     Card {
         icon: @image-url("../icons/target_arrow.svg");
