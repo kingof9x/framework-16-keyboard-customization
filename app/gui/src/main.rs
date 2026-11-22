@@ -22,7 +22,7 @@ pub const HAS_TRAY: bool = cfg!(windows);
 
 use deck::{Choice, Dev, KbType, Look, PlacedKey, Preview, Scene};
 use engine::{Command, EngineHandle, Slot, Status};
-use f16_core::audio::AudioColors;
+use f16_core::audio::{AudioColors, KeyReact};
 use f16_core::builtin::qmk_hsv;
 use f16_core::effects::LinkedEffect;
 use f16_core::keys::{self, SideModule, KEYBOARD_SIZE, MODULE_GRID};
@@ -338,6 +338,7 @@ impl State {
             microphone: self.s.audio_mic,
             device: self.s.audio_device.clone(),
             colors: self.s.audio_colors,
+            keys: self.s.audio_keys,
         }
     }
 
@@ -1207,6 +1208,12 @@ fn main() -> Result<(), slint::PlatformError> {
         keyedit::push(&app, &mut st);
         push_mics(&app, &st);
         push_audio_colors(&app, &st);
+        app.global::<App>().set_audio_keys(
+            KeyReact::ALL
+                .iter()
+                .position(|k| *k == st.s.audio_keys)
+                .unwrap_or(0) as i32,
+        );
         st.find_microphones();
         let g = app.global::<App>();
         g.set_version(update::CURRENT.into());
@@ -1534,6 +1541,14 @@ fn main() -> Result<(), slint::PlatformError> {
             _ => AudioColors::Auto,
         };
         push_audio_colors(&app, st);
+        st.audio_settings_changed();
+    });
+    on!(on_audio_keys_chosen, |app, st, i: i32| {
+        st.s.audio_keys = KeyReact::ALL
+            .get(i.max(0) as usize)
+            .copied()
+            .unwrap_or_default();
+        app.global::<App>().set_audio_keys(i);
         st.audio_settings_changed();
     });
     on!(on_audio_hotkey_toggled, |app, st, on: bool| {

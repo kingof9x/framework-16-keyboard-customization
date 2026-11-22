@@ -162,6 +162,62 @@ impl AudioColors {
     }
 }
 
+/// How key presses show on top of an audio show.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum KeyReact {
+    #[default]
+    Off,
+    /// The pressed key flashes white and fades.
+    Glow,
+    /// A ring spreads out from the key.
+    Ripple,
+    /// A burst of light spreads out from the key.
+    Splash,
+}
+
+impl KeyReact {
+    pub const ALL: [KeyReact; 4] = [
+        KeyReact::Off,
+        KeyReact::Glow,
+        KeyReact::Ripple,
+        KeyReact::Splash,
+    ];
+
+    pub fn key(self) -> &'static str {
+        match self {
+            KeyReact::Off => "off",
+            KeyReact::Glow => "glow",
+            KeyReact::Ripple => "ripple",
+            KeyReact::Splash => "splash",
+        }
+    }
+
+    pub fn from_key(k: &str) -> Option<Self> {
+        Self::ALL.iter().copied().find(|r| r.key() == k)
+    }
+
+    /// How long a press shows, in seconds.
+    fn life(self) -> f32 {
+        match self {
+            KeyReact::Off => 0.0,
+            KeyReact::Glow => 0.5,
+            KeyReact::Ripple => 0.9,
+            KeyReact::Splash => 0.7,
+        }
+    }
+
+    /// How strongly a press `age` seconds old shows at `d` key units from the key (0..1).
+    fn weight(self, d: f32, age: f32) -> f32 {
+        let fade = (1.0 - age / self.life()).max(0.0);
+        match self {
+            KeyReact::Off => 0.0,
+            KeyReact::Glow => (1.0 - d / 0.7).clamp(0.0, 1.0) * fade,
+            KeyReact::Ripple => (1.0 - (d - age * 9.0).abs() / 0.9).max(0.0) * fade,
+            KeyReact::Splash => (1.0 - d / (0.6 + age * 6.0)).clamp(0.0, 1.0) * fade * fade,
+        }
+    }
+}
+
 /// Bands the shows use (bass first).
 pub const BANDS: usize = 16;
 
@@ -174,6 +230,9 @@ struct Ring {
 pub struct AudioShow {
     pub look: AudioLook,
     pub colors: AudioColors,
+    pub keys: KeyReact,
+    /// Key presses still showing: where, and when.
+    presses: Vec<(Point, f32)>,
     levels: [f32; BANDS],
     loudness: f32,
     peak: f32,
@@ -190,6 +249,8 @@ impl AudioShow {
         Self {
             look,
             colors: AudioColors::Auto,
+            keys: KeyReact::Off,
+            presses: Vec::new(),
             levels: [0.0; BANDS],
             loudness: 0.0,
             peak: 0.0,
@@ -236,6 +297,8 @@ impl AudioShow {
         self.flash *= (-dt * 6.0).exp();
         let t = self.t;
         self.rings.retain(|r| t - r.born < 1.6);
+        let life = self.keys.life();
+        self.presses.retain(|(_, born)| t - born < life);
         beat
     }
 
@@ -243,8 +306,33 @@ impl AudioShow {
     pub fn render(&self, points: &[Point], width: f32, height: f32) -> Vec<Rgb> {
         points
             .iter()
-            .map(|p| self.color(*p, width, height))
+            .map(|p| self.with_presses(*p, self.color(*p, width, height)))
             .collect()
+    }
+
+    /// A key was pressed at `at` (layout units).
+    pub fn press(&mut self, at: Point) {
+        if self.keys != KeyReact::Off {
+            self.presses.push((at, self.t));
+        }
+    }
+
+    /// The show's color with key presses on top (blended towards white).
+    fn with_presses(&self, p: Point, c: Rgb) -> Rgb {
+        let w = self
+            .presses
+            .iter()
+            .map(|(at, born)| {
+                let d = ((p.x - at.x).powi(2) + (p.y - at.y).powi(2)).sqrt();
+                self.keys.weight(d, self.t - born)
+            })
+            .fold(0.0f32, f32::max)
+            .min(1.0);
+        if w <= 0.0 {
+            return c;
+        }
+        let mix = |v: u8| (v as f32 + (255.0 - v as f32) * w).round() as u8;
+        [mix(c[0]), mix(c[1]), mix(c[2])]
     }
 
     fn band_at(&self, f: f32) -> f32 {
@@ -399,6 +487,45 @@ mod tests {
         let lum = |c: Rgb| c.iter().map(|&v| v as u32).sum::<u32>();
         assert!(lum(c[5 * 20 + 3]) > lum(c[3]) * 3, "bottom lit, top dark");
         assert_eq!(c[5 * 20 + 3], c[5 * 20 + 15], "same across a row");
+    }
+
+    #[test]
+    fn key_presses_light_up_on_top_of_the_show() {
+        let mut show = AudioShow::new(AudioLook::Spectrum);
+        show.keys = KeyReact::Glow;
+        show.update(&[0.0; 16], 0.03);
+        let key = Point { x: 3.5, y: 2.5 };
+        show.press(key);
+        let c = show.render(&[key, Point { x: 15.5, y: 2.5 }], 20.0, 6.0);
+        assert!(
+            c[0].iter().all(|&v| v > 200),
+            "pressed key is white: {:?}",
+            c[0]
+        );
+        assert!(
+            c[1].iter().all(|&v| v < 30),
+            "far key stays dark: {:?}",
+            c[1]
+        );
+        // fades out
+        for _ in 0..30 {
+            show.update(&[0.0; 16], 0.03);
+        }
+        assert!(show.render(&[key], 20.0, 6.0)[0].iter().all(|&v| v < 30));
+        // ripples travel outwards
+        show.keys = KeyReact::Ripple;
+        show.press(key);
+        for _ in 0..10 {
+            show.update(&[0.0; 16], 0.03);
+        }
+        let near_ring = Point {
+            x: 3.5 + 2.7,
+            y: 2.5,
+        };
+        assert!(show.render(&[near_ring], 20.0, 6.0)[0][0] > 100);
+        for r in KeyReact::ALL {
+            assert_eq!(KeyReact::from_key(r.key()), Some(r));
+        }
     }
 
     #[test]
