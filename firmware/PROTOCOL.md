@@ -32,7 +32,7 @@ firmware).
 | `05` | FRAME | – | `start count (r g b)×count` (max 8 LEDs per message) |
 | `06` | HOST_MODE | `on` | `1` = show PC frames (not saved), `0` = back to the saved effect |
 | `07` | KEY_EVENTS | `count led_index×count` (presses since the last poll, max 28) | – |
-| `08` | LAYER | `layer` | `0` = MIDI, `1` = F-keys (macropad only, saved) |
+| `08` | LAYER | `layer` | Macropad: `0` = MIDI, `1` = F-keys. Keyboard: Fn lock, `0` = off (top row is media keys), `1` = on (top row is F1-F12); same as Fn + Esc. Both saved. Keyboard firmware before this answered `0xFF` |
 | `09` | SPAN | `on x_start x_end` | `on x_start x_end`: joined surface, this device's slice of 0–224 (saved) |
 | `0A` | CLOCK | – | `ms` (u32, little endian): sets the effect clock; sent to both joined devices back to back |
 | `0B` | PAINT | request `start`; answer `start count (hue sat on)×count` (max 9) | `start count (hue sat on)×count` (max 8) |
