@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Derived from QMK's RGB matrix effects (https://github.com/qmk/qmk_firmware).
+
 //! A software copy of the 44 built-in RGB effects in Framework's firmware
 //! (QMK's RGB matrix effects, in Framework's order), used for the preview.
 //!

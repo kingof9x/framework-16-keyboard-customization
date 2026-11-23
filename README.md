@@ -1,15 +1,54 @@
-# Framework 16 keyboard + macropad customization
+# Framework 16 Keyboard Control
 
-Custom lighting and macropad setup for the **Framework Laptop 16** with the
-**RGB ANSI keyboard** and the **RGB macropad**, for use with Resolume. Nothing
-needs to be installed on your PC to build it: GitHub builds the firmware and
-the Windows app.
+> **This project is finished.** All work on the app is complete, and its features
+> have been merged into the White Rabbit LED matrix app. Development continues there:
+> **<https://github.com/kingof9x/white-rabbit-framework-matrix>**
+>
+> **Download the last version (v1.0.3):**
+> [Windows installer](https://github.com/kingof9x/framework-16-keyboard-customization/releases/download/v1.0.3/framework-16-keyboard-control-1.0.3-setup.exe)
+> · [all release files](https://github.com/kingof9x/framework-16-keyboard-customization/releases/latest)
+
+**Framework 16 Keyboard Control** is a Windows app, plus custom firmware, for the
+**Framework Laptop 16** with the **RGB ANSI keyboard** and the **RGB macropad**
+(or Framework's numpad). It lets you:
+
+* **Light it your way.** Pick any of the 44 built-in effects and see them live on a
+  picture of your keyboard. Run one effect across the keyboard and macropad as a
+  single surface, and paint single keys in your own colors.
+* **Light it to music.** Audio mode turns what your PC plays, or a microphone, into
+  light shows: spectrum bars, a level meter, beat pulses, typing that changes color
+  with the music, and more. Ctrl+Alt+Shift+M or F12 + ↑ turns it on and off.
+* **Remap keys.** Change what any key does, turn keys off, or make a key open an
+  app. Changes are saved on the keyboard and work on any computer.
+* **Set up the macropad.** Layer A plays MIDI notes, for Resolume and other VJ or
+  music software. Layer B is a numpad. Corner-key combos switch layers.
+* **Use shortcuts.** Hold F12 and press → / ← to change the effect, or ↓ to go back
+  to your saved one.
+* **Update the firmware from the app.** One button downloads the latest firmware
+  and installs it, and your remapped keys are kept.
+* **Match brightness.** Pull the handles until the keyboard and macropad look equally
+  bright.
+
+The app sits in the notification area, can start with Windows, and checks GitHub
+for updates.
+
+| Lighting | Audio |
+|---|---|
+| ![Lighting page: the keyboard and macropad picture showing an effect, and the effect list](docs/screenshots/lighting.png) | ![Audio page: spectrum bars on the keyboard picture, input choice and level meter](docs/screenshots/audio.png) |
+| **Key mapping** | **Firmware** |
+| ![Key mapping page: keyboard picture with remapped keys, and the F12 and Fn options](docs/screenshots/key-mapping.png) | ![Firmware page: Update firmware buttons for the keyboard and macropad](docs/screenshots/firmware.png) |
+
+![Home page: shortcuts to every part of the app](docs/screenshots/home.png)
+
+## What's in this repository
 
 | Folder | What it is |
 |---|---|
+| [`app/`](app/) | **Framework 16 Keyboard Control**, the Windows app (Rust + Slint) |
 | [`firmware/`](firmware/) | Custom QMK firmware (`f16custom`) for the keyboard and the macropad |
-| [`app/`](app/) | **Framework 16 Keyboard Control**, a Windows app to control both devices' lighting |
 | [`resolume/`](resolume/MAPPING.md) | Key-by-key macropad sheet and how to map it in Resolume |
+
+The rest of this page is the full guide from when the project was active.
 
 ## What you get
 
@@ -250,9 +289,17 @@ step-by-step MIDI and keyboard mapping.
   * `firmware/keymaps/macropad/f16custom/`: macropad layers, combos and layer
     LEDs.
   * `app/core/`: effect maths and message encoding, with unit tests.
-  * `app/gui/`: the Windows app (egui + hidapi).
+  * `app/gui/`: the Windows app (Slint + hidapi).
 * **VIA:** still works. If you remap a macropad **corner key** in VIA, the
   two-key layer switch stops working for that layer, because the combos match
   the original keys.
 
-Licensed GPL-2.0-or-later, like QMK.
+## License
+
+The code written for this project is under the [MIT License](LICENSE).
+The firmware (`firmware/`) is built from QMK and Framework's QMK firmware, so it
+stays under [GPL-2.0-or-later](firmware/LICENSE). The same goes for two app files
+derived from QMK: `app/core/src/builtin.rs` (the effect preview) and
+`app/core/src/keymap_data.rs` (key tables). Because of those two files, the app
+as a whole is distributed under GPL-2.0-or-later. [`LICENSE`](LICENSE) has the
+details.
