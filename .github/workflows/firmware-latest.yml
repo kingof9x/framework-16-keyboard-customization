@@ -1,0 +1,65 @@
+# Newest keyboard + macropad firmware
+#
+# After every build of main (that is, after every merged PR), this copies the
+# firmware that build made (framework_ansi_f16custom.uf2 and
+# framework_macropad_f16custom.uf2) into a pre-release called `firmware-latest`.
+# White Rabbit's "Update firmware" button downloads from there, so it always gets
+# the firmware built from the newest code. Nobody has to run Build and release.
+#
+# `firmware-latest` is marked as a pre-release and never as "Latest", so it does
+# not change which real release GitHub shows as the newest.
+# Note: GitHub only runs `workflow_run` triggers from the copy of this file on
+# the default branch, so it starts working after this file is merged.
+
+name: Newest firmware
+
+on:
+  workflow_run:
+    workflows: ["Build and release"]
+    types: [completed]
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: firmware-latest
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.head_branch == github.event.repository.default_branch &&
+      github.event.workflow_run.event != 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      RUN_ID: ${{ github.event.workflow_run.id }}
+      SHA: ${{ github.event.workflow_run.head_sha }}
+      TAG: firmware-latest
+    steps:
+      - name: Download the firmware from that build
+        run: |
+          gh run download "$RUN_ID" -R "$REPO" -n firmware-uf2 -D out
+          ls -la out
+          test -f out/framework_ansi_f16custom.uf2
+          test -f out/framework_macropad_f16custom.uf2
+
+      - name: Publish it as firmware-latest
+        run: |
+          short=$(printf '%s' "$SHA" | cut -c1-7)
+          when=$(date -u +%Y-%m-%d)
+          title="Newest firmware ($when, $short)"
+          notes="Keyboard and macropad firmware built from the newest code on main (commit $short), updated automatically after every merge. White Rabbit's Update firmware button installs these. Not a numbered release."
+          if gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then
+            # Move the tag to the commit that was just built.
+            gh api -X PATCH "repos/$REPO/git/refs/tags/$TAG" -f sha="$SHA" -F force=true >/dev/null
+            gh release edit "$TAG" -R "$REPO" --title "$title" --notes "$notes" --prerelease --latest=false
+          else
+            gh release create "$TAG" -R "$REPO" --prerelease --latest=false --target "$SHA" \
+              --title "$title" --notes "$notes"
+          fi
+          gh release upload "$TAG" out/*.uf2 -R "$REPO" --clobber
