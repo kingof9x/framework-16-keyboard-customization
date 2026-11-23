@@ -5,7 +5,7 @@ members = ["core", "gui"]
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-license = "GPL-2.0-or-later"
+license = "MIT AND GPL-2.0-or-later"
 
 [profile.release]
 opt-level = 3
