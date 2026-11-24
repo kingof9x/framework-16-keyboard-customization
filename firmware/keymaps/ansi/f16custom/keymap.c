@@ -9,6 +9,7 @@
 //   * raw HID commands to read/set effect, speed, brightness and color
 //   * a hotkey lock (set from the PC app, saved in EEPROM) that turns the
 //     Fn lighting keys (RGB / backlight) into no-ops
+//   * Fn lock can be read and set from the PC app (LAYER command)
 
 #include QMK_KEYBOARD_H
 #include "framework.h"
@@ -214,6 +215,19 @@ bool pre_process_record_keymap(uint16_t keycode, keyrecord_t *record) {
         }
     }
     return false; // the arrow itself isn't typed
+}
+
+// Fn lock, for the PC app: 0 = top row does media keys (F1-F12 with Fn),
+// 1 = top row does F1-F12 (media keys with Fn). Same as pressing Fn + Esc,
+// and saved the same way, so it stays after a restart.
+uint8_t hostfx_get_layer(void) {
+    return get_highest_layer(default_layer_state) == _FN_LOCK ? 1 : 0;
+}
+
+bool hostfx_set_layer(uint8_t layer) {
+    if (layer > 1) return false;
+    set_single_persistent_default_layer(layer == 1 ? _FN_LOCK : _BASE);
+    return true;
 }
 
 // Make sure to keep FN Lock even after reset

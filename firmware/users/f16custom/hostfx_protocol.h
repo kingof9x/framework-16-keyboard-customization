@@ -31,7 +31,7 @@ enum hostfx_value_id {
     HOSTFX_FRAME       = 0x05, // set: [start, count, (r, g, b) * count]  (max 8 LEDs per message)
     HOSTFX_HOST_MODE   = 0x06, // get/set: 1 = switch to host-driven effect, 0 = back to saved effect
     HOSTFX_KEY_EVENTS  = 0x07, // get: [count, led_index * count] key presses since last poll (max 28)
-    HOSTFX_LAYER       = 0x08, // get/set: macropad layer (0 = MIDI, 1 = F-keys); keyboard answers 0xFF
+    HOSTFX_LAYER       = 0x08, // get/set: macropad layer (0 = MIDI, 1 = F-keys); keyboard Fn lock (0 = off, 1 = on; older keyboard firmware answers 0xFF)
     HOSTFX_SPAN        = 0x09, // get/set: [on, x_start, x_end] joined surface: this device's slice of 0..224 (saved)
     HOSTFX_CLOCK       = 0x0A, // set: [ms (u32, little endian)] line up the effect clock of joined devices
     HOSTFX_PAINT       = 0x0B, // get: [start] -> [count, (hue, sat, on) * count] (max 9)
