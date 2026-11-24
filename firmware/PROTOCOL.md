@@ -25,7 +25,7 @@ firmware).
 
 | Id | Name | get payload (answer) | set payload |
 |----|------|----------------------|-------------|
-| `01` | INFO | `'F' 'X' version(2) led_count effect_count host_effect_id kind(0=kb,1=pad) hotkey_lock layer(0xFF=n/a) max_brightness paint_only_effect_id` | – |
+| `01` | INFO | `'F' 'X' version(2) led_count effect_count host_effect_id kind(0=kb,1=pad) hotkey_lock layer(0xFF=n/a) max_brightness paint_only_effect_id 'B' build(u16 LE, 0 = test build)` (older firmware: 0 0 0 at the end) | – |
 | `02` | STATE | `enabled mode hue sat val speed streaming` | `enabled mode hue sat val speed save` (`save=1` writes EEPROM) |
 | `03` | HOTKEY_LOCK | `on` | `on` (always saved to EEPROM) |
 | `04` | LED_INFO | request `start`; answer `start count (x y flags)×count` (max 9). Positions are the real ones, also while joined | – |

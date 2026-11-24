@@ -44,10 +44,20 @@ for kb in "${targets[@]}"; do
     cp -r "$HERE/keymaps/$kb/$KEYMAP" "$dest"
 done
 
+# Build number: the CI run number for builds of main and of release tags, so the app can tell
+# which firmware is newer. Pull requests and builds made by hand are test builds (0).
+BUILD=0
+if [ "${GITHUB_ACTIONS:-}" = "true" ] && [ "${GITHUB_EVENT_NAME:-}" != "pull_request" ]; then
+    case "${GITHUB_REF:-}" in
+        refs/heads/main | refs/tags/*) BUILD="${GITHUB_RUN_NUMBER:-0}" ;;
+    esac
+fi
+echo ">> Firmware build number: $BUILD"
+
 mkdir -p "$OUT_DIR"
 for kb in "${targets[@]}"; do
     echo ">> Building framework/$kb:$KEYMAP"
-    make -C "$QMK_DIR" "framework/$kb:$KEYMAP" -j"$(nproc)"
+    make -C "$QMK_DIR" "framework/$kb:$KEYMAP" -j"$(nproc)" F16_FIRMWARE_BUILD="$BUILD"
     cp "$QMK_DIR/framework_${kb}_${KEYMAP}.uf2" "$OUT_DIR/"
 done
 

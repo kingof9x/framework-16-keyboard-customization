@@ -188,6 +188,21 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
 }
 
 // ---------------------------------------------------------------------------
+// Build number
+// ---------------------------------------------------------------------------
+
+// The CI build number of this firmware (0 = a test build or one made by hand). build.sh sets it.
+#ifndef F16_FIRMWARE_BUILD
+#    define F16_FIRMWARE_BUILD 0
+#endif
+
+// The same number, with a tag in front, kept in the firmware image so the app can read it from a
+// .uf2 file before installing it. INFO reads it from here, which keeps it in the image.
+__attribute__((used)) const uint8_t f16_build_tag[13] = {
+    'F', '1', '6', 'F', 'W', '-', 'B', 'U', 'I', 'L', 'D', F16_FIRMWARE_BUILD & 0xFF, (F16_FIRMWARE_BUILD >> 8) & 0xFF,
+};
+
+// ---------------------------------------------------------------------------
 // Raw HID (VIA custom channel 0)
 // ---------------------------------------------------------------------------
 
@@ -207,6 +222,13 @@ static bool handle_get(uint8_t value_id, uint8_t *d) {
             d[8] = hostfx_get_layer();
             d[9] = RGB_MATRIX_MAXIMUM_BRIGHTNESS;
             d[10] = RGB_MATRIX_CUSTOM_PAINT_ONLY;
+            {
+                // 'B' + build number (u16, little endian). Older firmware leaves these 0.
+                const volatile uint8_t *tag = f16_build_tag;
+                d[11] = 'B';
+                d[12] = tag[11];
+                d[13] = tag[12];
+            }
             break;
         case HOSTFX_STATE: {
             HSV hsv = rgb_matrix_get_hsv();

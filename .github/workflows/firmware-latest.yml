@@ -39,6 +39,8 @@ jobs:
       REPO: ${{ github.repository }}
       RUN_ID: ${{ github.event.workflow_run.id }}
       SHA: ${{ github.event.workflow_run.head_sha }}
+      # The firmware's build number (build.sh puts the same run number into it).
+      BUILD: ${{ github.event.workflow_run.run_number }}
       TAG: firmware-latest
     steps:
       - name: Download the firmware from that build
@@ -52,8 +54,8 @@ jobs:
         run: |
           short=$(printf '%s' "$SHA" | cut -c1-7)
           when=$(date -u +%Y-%m-%d)
-          title="Newest firmware ($when, $short)"
-          notes="Keyboard and macropad firmware built from the newest code on main (commit $short), updated automatically after every merge. White Rabbit's Update firmware button installs these. Not a numbered release."
+          title="Newest firmware build $BUILD ($when, $short)"
+          notes="Keyboard and macropad firmware build $BUILD, built from the newest code on main (commit $short), updated automatically after every merge. White Rabbit's Update firmware button installs these. Not a numbered release."
           if gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then
             # Move the tag to the commit that was just built.
             gh api -X PATCH "repos/$REPO/git/refs/tags/$TAG" -f sha="$SHA" -F force=true >/dev/null
